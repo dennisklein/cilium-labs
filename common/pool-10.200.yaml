@@ -1,0 +1,9 @@
+# LB IPs that are NOT on the docker bridge: they only exist via BGP advertisement.
+# Explicit range: avoid .0 (network address) and .255 (broadcast).
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata: {name: bgp-pool}
+spec:
+  blocks:
+  - start: "10.200.0.10"
+    stop:  "10.200.0.250"
