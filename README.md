@@ -11,6 +11,8 @@ Run `./NN-xxx/up.sh`, experiment, then `./NN-xxx/down.sh`. One stage at a time (
 | [05-bgp-frr](05-bgp-frr/README.md) | Cilium BGP control plane peering with an FRR container on the kind network | yes (mgmt = kind network) |
 | [06-fabric](06-fabric/README.md) | spine/leaf FRR fabric, per-node uplinks (ext-container), external client reaching LB IPs over BGP/ECMP | yes (ext-container) |
 | [07-clustermesh](07-clustermesh/README.md) | two kind clusters, Cluster Mesh, global service | no |
+| [08-dual-stack](08-dual-stack/README.md)   | IPv4 + IPv6 pods and Services, native routing for both families | no |
+| [09-egress-gateway](09-egress-gateway/README.md) | selected pods leave via a gateway node with a fixed egress IP, through a router to an external server | yes (ext-container) |
 
 ### Quick start
 
