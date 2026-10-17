@@ -1,0 +1,14 @@
+# Two clients on the SAME plain node (egress-worker3); only the labelled one is selected by the policy
+apiVersion: v1
+kind: Pod
+metadata: {name: client-egress, labels: {egress: "true"}}
+spec:
+  nodeSelector: {kubernetes.io/hostname: egress-worker3}
+  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: client-plain}
+spec:
+  nodeSelector: {kubernetes.io/hostname: egress-worker3}
+  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]

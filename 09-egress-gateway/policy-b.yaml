@@ -1,0 +1,13 @@
+# Pods labelled egress=true reach 10.30.2.0/24 via gateway B, SNATed to 10.30.3.100
+apiVersion: cilium.io/v2
+kind: CiliumEgressGatewayPolicy
+metadata: {name: via-gateway}
+spec:
+  selectors:
+  - podSelector:
+      matchLabels: {egress: "true"}
+  destinationCIDRs: ["10.30.2.0/24"]
+  egressGateway:
+    nodeSelector:
+      matchLabels: {egress-gw: "b"}
+    egressIP: 10.30.3.100

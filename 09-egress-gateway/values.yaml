@@ -1,0 +1,9 @@
+operator: {replicas: 1}
+ipam: {mode: kubernetes}
+kubeProxyReplacement: true        # required by egress gateway
+bpf: {masquerade: true}           # required by egress gateway
+egressGateway: {enabled: true}
+l7Proxy: false                    # older docs list the L7 proxy as incompatible; we don't need it here
+routingMode: tunnel               # the most commonly documented mode for egress gateway
+tunnelProtocol: vxlan
+devices: "eth+"                   # include the uplink (eth1) on the gateway nodes

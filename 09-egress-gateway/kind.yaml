@@ -1,0 +1,12 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: egress
+networking:
+  disableDefaultCNI: true
+  kubeProxyMode: none
+  podSubnet: "10.244.0.0/16"
+nodes:
+- role: control-plane
+- role: worker      # egress-worker   -> gateway A (uplink to router)
+- role: worker      # egress-worker2  -> gateway B (uplink to router)
+- role: worker      # egress-worker3  -> plain node where the client pods run
