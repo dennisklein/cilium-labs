@@ -1,0 +1,4 @@
+operator: {replicas: 1}
+ipam: {mode: kubernetes}
+routingMode: tunnel
+tunnelProtocol: vxlan

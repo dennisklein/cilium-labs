@@ -1,0 +1,10 @@
+operator: {replicas: 1}
+ipam: {mode: kubernetes}
+kubeProxyReplacement: true
+routingMode: tunnel              # simplest across clusters
+tunnelProtocol: vxlan
+clustermesh:
+  useAPIServer: true
+  apiserver:
+    service: {type: NodePort}
+    tls: {auto: {enabled: true, method: helm}}

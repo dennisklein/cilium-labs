@@ -1,0 +1,13 @@
+operator: {replicas: 1}
+ipam: {mode: kubernetes}
+routingMode: tunnel
+tunnelProtocol: vxlan
+kubeProxyReplacement: true
+hubble:
+  enabled: true
+  relay: {enabled: true}
+  ui: {enabled: true}
+# Needs WireGuard in the host kernel (5.6+). Remove this block if it fails.
+encryption:
+  enabled: true
+  type: wireguard

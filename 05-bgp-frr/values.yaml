@@ -1,0 +1,8 @@
+operator: {replicas: 1}
+ipam: {mode: kubernetes}
+kubeProxyReplacement: true
+routingMode: native
+ipv4NativeRoutingCIDR: 10.244.0.0/16
+autoDirectNodeRoutes: true
+bpf: {masquerade: true}
+bgpControlPlane: {enabled: true}

@@ -1,0 +1,39 @@
+name: cilium-fabric
+topology:
+  defaults:
+    kind: linux
+    image: quay.io/frrouting/frr:10.2.1
+  nodes:
+    spine:
+      binds: [./frr/spine.conf:/etc/frr/frr.conf, ./frr/daemons:/etc/frr/daemons, ./frr/vtysh.conf:/etc/frr/vtysh.conf]
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.10.10.0/31 dev eth1
+        - ip addr add 10.10.10.2/31 dev eth2
+        - ip addr add 10.10.20.1/24 dev eth3
+    leaf1:
+      binds: [./frr/leaf1.conf:/etc/frr/frr.conf, ./frr/daemons:/etc/frr/daemons, ./frr/vtysh.conf:/etc/frr/vtysh.conf]
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.10.10.1/31 dev eth1
+        - ip addr add 10.10.1.0/31 dev eth2
+    leaf2:
+      binds: [./frr/leaf2.conf:/etc/frr/frr.conf, ./frr/daemons:/etc/frr/daemons, ./frr/vtysh.conf:/etc/frr/vtysh.conf]
+      exec:
+        - sysctl -w net.ipv4.ip_forward=1
+        - ip addr add 10.10.10.3/31 dev eth1
+        - ip addr add 10.10.2.0/31 dev eth2
+    client:
+      image: nicolaka/netshoot:latest
+      exec:
+        - ip addr add 10.10.20.2/24 dev eth1
+        - ip route add 10.0.0.0/8 via 10.10.20.1
+    # Existing kind node containers; names must match exactly
+    fabric-worker:  {kind: ext-container}
+    fabric-worker2: {kind: ext-container}
+  links:
+    - endpoints: ["spine:eth1", "leaf1:eth1"]
+    - endpoints: ["spine:eth2", "leaf2:eth1"]
+    - endpoints: ["spine:eth3", "client:eth1"]
+    - endpoints: ["leaf1:eth2", "fabric-worker:eth1"]
+    - endpoints: ["leaf2:eth2", "fabric-worker2:eth1"]

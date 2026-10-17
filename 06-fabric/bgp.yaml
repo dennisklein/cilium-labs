@@ -1,0 +1,43 @@
+# One cluster config per rack, because each rack peers with a different leaf address
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata: {name: rack1}
+spec:
+  nodeSelector: {matchLabels: {rack: "1"}}
+  bgpInstances:
+  - name: rack1
+    localASN: 65001
+    peers:
+    - {name: leaf1, peerASN: 65101, peerAddress: 10.10.1.0, peerConfigRef: {name: peer}}
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata: {name: rack2}
+spec:
+  nodeSelector: {matchLabels: {rack: "2"}}
+  bgpInstances:
+  - name: rack2
+    localASN: 65001
+    peers:
+    - {name: leaf2, peerASN: 65102, peerAddress: 10.10.2.0, peerConfigRef: {name: peer}}
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPPeerConfig
+metadata: {name: peer}
+spec:
+  timers: {holdTimeSeconds: 9, keepAliveTimeSeconds: 3}
+  families:
+  - afi: ipv4
+    safi: unicast
+    advertisements: {matchLabels: {advertise: bgp}}
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata: {name: adverts, labels: {advertise: bgp}}
+spec:
+  advertisements:
+  - advertisementType: PodCIDR
+  - advertisementType: Service
+    service: {addresses: [LoadBalancerIP]}
+    selector:
+      matchExpressions: [{key: never-used, operator: NotIn, values: ["x"]}]

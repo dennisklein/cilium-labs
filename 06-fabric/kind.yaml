@@ -1,0 +1,11 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: fabric
+networking:
+  disableDefaultCNI: true
+  kubeProxyMode: none
+  podSubnet: "10.244.0.0/16"
+nodes:
+- role: control-plane
+- role: worker      # -> rack1 / leaf1
+- role: worker      # -> rack2 / leaf2
