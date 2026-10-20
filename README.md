@@ -1,6 +1,6 @@
 # Cilium + kind + containerlab lab ladder
 
-Run `./NN-xxx/up.sh`, experiment, then `./NN-xxx/down.sh`. One stage at a time (stages 1-5 reuse the cluster name `lab`).
+In a stage folder: `mise run up`, experiment, `mise run check`, then `mise run down`. One stage at a time (stages 1-5 and 8 reuse the cluster name `lab`).
 
 | Stage | Adds | Containerlab required|
 |-------|------|----------------------|
@@ -18,12 +18,18 @@ Run `./NN-xxx/up.sh`, experiment, then `./NN-xxx/down.sh`. One stage at a time (
 
 * Install [mise](https://mise.jdx.dev/), then, in this directory:
 ```
-mise trust && mise install
-eval "$(mise activate bash)"   # or: mise x -- ./01-basic/up.sh
+mise trust -a && mise install
+eval "$(mise activate bash)"   # loads [env] when you cd into a stage folder
+cd 01-basic && mise run up     # or, from the repo root: mise run //01-basic:up
 ```
-* `mise.toml` is the single source of truth:
-  - `[tools]`: `kubectl`, `kind`, `helm`, `cilium-cli`, `jq`, `containerlab`, `hubble`, `envsubst`, each pinned to an exact version;
-  - `[env]`: `CILIUM_VERSION` and `CLUSTER`, read by `common.sh`.
+* Each stage has the tasks `up` (cluster, Cilium, lab objects, then `check`), `check` (probes only) and `down`.
+  List them with `mise tasks ls --all`. `mise run down-all` tears down every stage.
+* `mise.toml` (root) is the single source of truth for tools and versions:
+  - `[tools]`: `kubectl`, `kind`, `helm`, `cilium-cli`, `jq`, `containerlab`, `hubble`, `envsubst`;
+  - `[env]`: `CILIUM_VERSION`, and `LAB_ROOT` for the shared helpers in `lib/lab.sh`.
+* Each stage `mise.toml` sets `CLUSTER` and `KUBECONFIG` (`<stage>/build/kubeconfig`). With `mise activate`,
+  `kubectl`, `cilium` and `hubble` inside a stage folder talk to that stage's cluster, with no `--context`.
+  Outside mise, use `mise x -- kubectl ...` in the stage folder, or `kind export kubeconfig --name <cluster>`.
 * Docker comes from the OS, not from mise.
 
 ### Tools required to run the labs
@@ -40,8 +46,8 @@ eval "$(mise activate bash)"   # or: mise x -- ./01-basic/up.sh
 
 * Pinned: Cilium and tool versions in `mise.toml`; FRR 10.7.1 in the topology files.
 * `kind` commands need `--name <cluster>` (or `export KIND_CLUSTER_NAME=lab`); `kind get clusters` lists all.
-* If labs are launched on a host behind a proxy: put the docker subnet(s) and `10.244.0.0/16, 10.96.0.0/12, 10.200.0.0/24` in `NO_PROXY` (proper CIDRs, e.g. 172.18.0.0/16). Pods don't use the proxy, so skip the connectivity tests that need direct internet (see [03-native-routing](03-native-routing/up.sh)).
-* Labs 05/06/09 run containerlab with `sudo` (through `clab` in `common.sh`, which passes the mise binary path) without `-E`; the topology is rendered with `envsubst` beforehand.
+* If labs are launched on a host behind a proxy: put the docker subnet(s) and `10.244.0.0/16, 10.96.0.0/12, 10.200.0.0/24` in `NO_PROXY` (proper CIDRs, e.g. 172.18.0.0/16). Pods don't use the proxy, so skip the connectivity tests that need direct internet (see [03-native-routing](03-native-routing/mise-tasks/check)).
+* Labs 05/06/09 run containerlab with `sudo` (through `clab` in `lib/lab.sh`, which passes the mise binary path) without `-E`; the topology is rendered with `envsubst` beforehand. Their `up` and `down` tasks ask for the sudo password first.
 * After editing an FRR config, destroy and redeploy the lab (destroy, re-render, deploy).
 
 #### Cluster Mesh troubleshooting (stage 07)

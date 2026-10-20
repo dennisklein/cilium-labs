@@ -21,17 +21,18 @@ the `LoadBalancer` IP across the fabric with ECMP. East-west pod traffic stays o
 
 **Run / verify / tear down**
 ```bash
-./up.sh                                           # ends with client -> LB IP via the fabric
+mise run up                                           # ends with client -> LB IP via the fabric
+mise run check   # the probes only; run again at any time
 docker exec clab-cilium-fabric-spine vtysh -c 'show ip route bgp'
 cilium bgp peers
-./down.sh
+mise run down
 ```
 
 **Gotchas**
 - Cilium's BGP Control Plane advertises routes but does not install learned ones, so the fabric carries
   north-south traffic only.
 - A node can be selected by only **one** `CiliumBGPClusterConfig`; keep the rack selectors disjoint.
-- Node-side addressing (`ip addr` on `eth1`, return route) is done by `up.sh`, then the agents are restarted
+- Node-side addressing (`ip addr` on `eth1`, return route) is done by the `up` task, then the agents are restarted
   so `devices: eth+` picks up `eth1`.
 - Container names must match exactly (`fabric-worker`, `fabric-worker2`); the cluster is named `fabric`.
 

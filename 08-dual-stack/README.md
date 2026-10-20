@@ -12,21 +12,22 @@ Service access over IPv4 and IPv6.
 
 **Run / verify / tear down**
 ```bash
-./up.sh          # prints pod IPs, Service IPs, per-family HTTP checks and the IPv6 routes
+mise run up          # prints pod IPs, Service IPs, per-family HTTP checks and the IPv6 routes
+mise run check   # the probes only; run again at any time
 kubectl get pod -o jsonpath='{.items[*].status.podIPs}'
 docker exec lab-worker ip -6 route | grep fd00:10:244
 cilium connectivity test --test '!pod-to-world,!pod-to-cidr,!to-entities-world,!to-fqdns'
-./down.sh
+mise run down
 ```
 
 **Gotchas**
 - Docker's `kind` network must have IPv6 enabled (kind creates it that way when the Docker daemon supports it).
-  Check with `docker network inspect kind -f '{{.EnableIPv6}}'`; `up.sh` warns if it can't confirm.
+  Check with `docker network inspect kind -f '{{.EnableIPv6}}'`; the `up` task warns if it can't confirm.
 - Pods and nodes get IPv6 only inside the Docker network (ULA addresses). Reaching the **IPv6 internet** also needs
   IPv6 forwarding/NAT on the host, which is usually absent, so keep the *world* tests skipped.
-- `up.sh` passes the control plane's IPv4 address as `k8sServiceHost` instead of its container name, as a precaution so
+- The `up` task passes the control plane's IPv4 address as `k8sServiceHost` instead of its container name, as a precaution so
   the name doesn't resolve to IPv6 first (not something that failed in testing).
-- Dual-stack can't be switched on in an existing cluster here: recreate it (`./down.sh && ./up.sh`).
+- Dual-stack can't be switched on in an existing cluster here: recreate it (`mise run down && mise run up`).
 
 **Docs**
 - Kubernetes dual-stack: https://kubernetes.io/docs/concepts/services-networking/dual-stack/

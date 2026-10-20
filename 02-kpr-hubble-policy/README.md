@@ -11,10 +11,11 @@ transparent encryption between nodes, and a demo **CiliumNetworkPolicy** that al
 
 **Run / verify / tear down**
 ```bash
-./up.sh        # prints 200 for GET and 403 for POST
+mise run up        # prints 200 for GET and 403 for POST
+mise run check   # the probes only; run again at any time
 kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep -iE 'encryption|kubeproxy'
 cilium hubble port-forward &   # then, with the hubble CLI installed: hubble observe -n demo
-./down.sh
+mise run down
 ```
 
 **Gotchas**

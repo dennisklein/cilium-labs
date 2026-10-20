@@ -15,12 +15,13 @@ the pod CIDRs and the `LoadBalancer` IPs (pool `10.200.0.10-250`, which exist on
 
 **Run / verify / tear down**
 ```bash
-./up.sh
+mise run up
+mise run check   # the probes only; run again at any time
 cilium bgp peers
 docker exec clab-bgp-lab-frr vtysh -c 'show bgp summary'
 docker exec clab-bgp-lab-frr vtysh -c 'show ip route bgp'
 docker exec clab-bgp-lab-frr wget -qO- -T3 http://10.200.0.10 | head -n 4
-./down.sh      # destroys the lab first, then the cluster
+mise run down      # destroys the lab first, then the cluster
 ```
 
 **Try next:** `docker stop lab-worker2` (next hop disappears within the hold time); patch `web` with
