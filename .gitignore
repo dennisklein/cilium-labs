@@ -1,0 +1,4 @@
+# generated per stage: kubeconfig, rendered templates, containerlab lab folders
+build/
+clab-*/
+.*.clab.yml.bak
