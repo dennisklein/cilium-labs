@@ -1,0 +1,8 @@
+# Two clusters: no CLUSTER here. The tasks set it per step and keep --context,
+# because both contexts (kind-mesh1, kind-mesh2) live in the one KUBECONFIG file.
+[env]
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.down]
+description = "Delete both clusters"
+run = "kind delete cluster --name mesh1; kind delete cluster --name mesh2"

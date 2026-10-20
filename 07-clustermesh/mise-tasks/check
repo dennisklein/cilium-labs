@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Global service answers from both clusters"
+source "$LAB_ROOT/lib/lab.sh"
+
+echo "--- waiting until mesh1 gets replies from BOTH clusters (up to ~2 min)..."
+ok=0; out=""
+for _ in $(seq 24); do
+  out=$(for _ in $(seq 20); do kubectl --context kind-mesh1 exec client -- curl -s http://echo:5678; done | sort | uniq -c)
+  if echo "$out" | grep -q mesh1 && echo "$out" | grep -q mesh2; then ok=1; break; fi
+  sleep 5
+done
+echo "$out"
+if [ "$ok" = 1 ]; then echo "OK: global service balances across both clusters"
+else echo "FAIL: only one cluster answers (see README troubleshooting)"; exit 1; fi
