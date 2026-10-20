@@ -6,6 +6,8 @@ helm = "4.3.1"
 cilium-cli = "0.20.1"
 jq = "1.8.2"
 "github:srl-labs/containerlab" = "0.81.1"
+"github:cilium/hubble" = "1.20.2"
+envsubst = "1.4.3"
 
 [env]
 CILIUM_VERSION = "1.20.3"

@@ -5,12 +5,12 @@ kind_up kind.yaml
 cilium_install values.yaml
 export KIND_SUBNET="$(kind_subnet)"
 export FRR_IP="$(echo "$KIND_SUBNET" | cut -d. -f1,2).0.100"
-envsubst '${KIND_SUBNET} ${FRR_IP}' < frr/frr.conf.tpl > build/frr.conf
+envsubst < frr/frr.conf.tpl > build/frr.conf
 k label nodes --all bgp=enabled --overwrite
 wait_crds ciliumbgpclusterconfigs.cilium.io ciliumbgppeerconfigs.cilium.io ciliumbgpadvertisements.cilium.io ciliumloadbalancerippools.cilium.io
-envsubst '${FRR_IP}' < bgp.yaml.tpl | k apply -f -
+envsubst < bgp.yaml.tpl | k apply -f -
 k apply -f ../common/pool-10.200.yaml -f ../common/demo-lb.yaml
-envsubst '${KIND_SUBNET} ${FRR_IP}' < topo.clab.yml.tpl > topo.clab.yml   # rendered here: no `sudo -E` needed
+envsubst < topo.clab.yml.tpl > topo.clab.yml   # rendered here: no `sudo -E` needed
 clab deploy -t topo.clab.yml --reconfigure
 for i in $(seq 30); do   # wait for the first session instead of a blind sleep
   docker exec clab-bgp-lab-frr vtysh -c 'show bgp summary json' 2>/dev/null | grep -q Established && break

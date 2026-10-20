@@ -22,13 +22,13 @@ mise trust && mise install
 eval "$(mise activate bash)"   # or: mise x -- ./01-basic/up.sh
 ```
 * `mise.toml` is the single source of truth:
-  - `[tools]`: `kubectl`, `kind`, `helm`, `cilium-cli`, `jq`, `containerlab`, each pinned to an exact version;
+  - `[tools]`: `kubectl`, `kind`, `helm`, `cilium-cli`, `jq`, `containerlab`, `hubble`, `envsubst`, each pinned to an exact version;
   - `[env]`: `CILIUM_VERSION` and `CLUSTER`, read by `common.sh`.
-* Docker and `envsubst` (gettext) come from the OS, not from mise.
+* Docker comes from the OS, not from mise.
 
 ### Tools required to run the labs
 
-* `docker, kind, kubectl, helm, envsubst` (gettext): all labs;
+* `docker, kind, kubectl, helm, envsubst`: all labs;
 * `containerlab`: labs 05/06/09;
 * `cilium-cli` + `jq`: lab 07.
 

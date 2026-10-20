@@ -17,7 +17,7 @@ cilium clustermesh connect --context kind-mesh1 --destination-context kind-mesh2
 cilium clustermesh status --context kind-mesh1 --wait
 
 for n in 1 2; do
-  NAME=mesh$n envsubst '${NAME}' < demo.yaml.tpl | kubectl --context kind-mesh$n apply -f -
+  NAME=mesh$n envsubst < demo.yaml.tpl | kubectl --context kind-mesh$n apply -f -
   kubectl --context kind-mesh$n wait --for=condition=Ready pod --all --timeout=120s
 done
 echo "--- waiting until mesh1 gets replies from BOTH clusters (up to ~2 min)..."

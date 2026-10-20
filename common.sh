@@ -6,7 +6,7 @@ set -euo pipefail
 : "${CLUSTER:?not set: run the stage inside the mise environment}"
 
 for t in docker kind kubectl helm envsubst; do
-  command -v "$t" >/dev/null || { echo "missing prerequisite: $t (mise install; docker and envsubst come from the OS)"; exit 1; }
+  command -v "$t" >/dev/null || { echo "missing prerequisite: $t (mise install; docker comes from the OS)"; exit 1; }
 done
 
 # sudo resets PATH, so pass the mise-managed binary by absolute path

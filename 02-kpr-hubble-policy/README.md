@@ -19,7 +19,7 @@ cilium hubble port-forward &   # then, with the hubble CLI installed: hubble obs
 
 **Gotchas**
 - WireGuard needs kernel support (5.6+). If the agents fail, delete the `encryption:` block in `values.yaml`.
-- The `hubble` CLI is not installed (optional); the Hubble UI works through `cilium hubble ui`.
+- The `hubble` CLI comes from `mise.toml`; the Hubble UI works through `cilium hubble ui`.
 
 **Docs**
 - kube-proxy replacement: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/
