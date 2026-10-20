@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="BGP sessions and routes on FRR, LB IP reachable from FRR"
+source "$LAB_ROOT/lib/lab.sh"
+FRR=clab-bgp-lab-frr
+
+wait_bgp "$FRR"
+sleep 5   # let the remaining nodes establish
+echo "--- BGP sessions on FRR:"
+docker exec "$FRR" vtysh -c 'show bgp summary'
+docker exec "$FRR" vtysh -c 'show ip route bgp'
+IP=$(kubectl get svc web -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "--- FRR -> LB IP $IP:"
+docker exec "$FRR" wget -qO- -T3 "http://$IP" | head -n 4

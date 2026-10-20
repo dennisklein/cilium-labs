@@ -1,0 +1,13 @@
+[env]
+CLUSTER = "fabric"
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.down]
+description = "Destroy the containerlab fabric, then the cluster"
+depends = ["//:sudo"]
+shell = "bash -c"
+run = """
+source $LAB_ROOT/lib/lab.sh
+clab destroy -t topo.clab.yml --cleanup || true
+kind delete cluster --name $CLUSTER
+"""

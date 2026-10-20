@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Cilium BGP control plane peering with an FRR container on the kind network"
+#MISE depends=["//:preflight", "//:sudo"]
+source "$LAB_ROOT/lib/lab.sh"
+
+kind_up
+cilium_up
+KIND_SUBNET="$(kind_subnet)"
+FRR_IP="$(echo "$KIND_SUBNET" | cut -d. -f1,2).0.100"
+export KIND_SUBNET FRR_IP
+envsubst < frr/frr.conf.tpl > build/frr.conf
+envsubst < topo.clab.yml.tpl > build/topo.clab.yml   # rendered here: no `sudo -E` needed
+kubectl label nodes --all bgp=enabled --overwrite
+wait_crds ciliumbgpclusterconfigs.cilium.io ciliumbgppeerconfigs.cilium.io ciliumbgpadvertisements.cilium.io ciliumloadbalancerippools.cilium.io
+envsubst < bgp.yaml.tpl | kubectl apply -f -
+kubectl apply -f ../common/pool-10.200.yaml -f ../common/demo-lb.yaml
+clab deploy -t build/topo.clab.yml --reconfigure
+mise run check

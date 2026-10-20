@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#MISE description="Selected pods leave via a gateway node with a fixed egress IP"
+#MISE depends=["//:preflight", "//:sudo"]
+source "$LAB_ROOT/lib/lab.sh"
+
+kind_up
+cilium_up
+kubectl label node "${CLUSTER}-worker"  egress-gw=a --overwrite
+kubectl label node "${CLUSTER}-worker2" egress-gw=b --overwrite
+wait_crds ciliumegressgatewaypolicies.cilium.io
+kubectl apply -f demo.yaml
+
+clab deploy -t topo.clab.yml --reconfigure
+
+# Gateway side: uplink address + the egress IP (must exist on the node) + route to the server network
+wire() { # <container> <uplink ip> <egress ip> <router ip>
+  docker exec "$1" ip addr add "$2/24" dev eth1 2>/dev/null || true
+  docker exec "$1" ip addr add "$3/24" dev eth1 2>/dev/null || true
+  docker exec "$1" ip link set eth1 up
+  docker exec "$1" ip route replace 10.30.2.0/24 via "$4" dev eth1
+}
+wire "${CLUSTER}-worker"  10.30.1.1 10.30.1.100 10.30.1.254
+wire "${CLUSTER}-worker2" 10.30.3.1 10.30.3.100 10.30.3.254
+kubectl -n kube-system rollout restart ds/cilium && kubectl -n kube-system rollout status ds/cilium
+kubectl wait --for=condition=Ready pod/client-egress pod/client-plain --timeout=120s
+mise run check

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Spine/leaf FRR fabric, external client reaching LB IPs over BGP/ECMP"
+#MISE depends=["//:preflight", "//:sudo"]
+source "$LAB_ROOT/lib/lab.sh"
+
+kind_up
+cilium_up
+kubectl label node "${CLUSTER}-worker"  rack=1 --overwrite
+kubectl label node "${CLUSTER}-worker2" rack=2 --overwrite
+wait_crds ciliumbgpclusterconfigs.cilium.io ciliumloadbalancerippools.cilium.io
+kubectl apply -f ../common/pool-10.200.yaml -f bgp.yaml -f ../common/demo-lb.yaml
+
+clab deploy -t topo.clab.yml --reconfigure
+
+# Address the kind-node side of each uplink (containerlab only injects eth1)
+wire() { # <container> <ip/31> <leaf ip>
+  docker exec "$1" ip addr add "$2" dev eth1 2>/dev/null || true
+  docker exec "$1" ip link set eth1 up
+  docker exec "$1" ip route replace 10.10.20.0/24 via "$3" dev eth1   # return path to client
+}
+wire "${CLUSTER}-worker"  10.10.1.1/31 10.10.1.0
+wire "${CLUSTER}-worker2" 10.10.2.1/31 10.10.2.0
+kubectl -n kube-system rollout restart ds/cilium && kubectl -n kube-system rollout status ds/cilium
+mise run check
