@@ -1,0 +1,20 @@
+[env]
+CLUSTER = "lab"
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.up]
+description = "kind + Cilium, VXLAN tunnel, kube-proxy still present"
+depends = ["//:preflight"]
+shell = "bash -c"
+run = "source $LAB_ROOT/lib/lab.sh; kind_up; cilium_up; mise run check"
+
+[tasks.check]
+description = "Wait for Cilium to be ready"
+run = [
+  "cilium status --wait",
+  "echo 'Next: cilium connectivity test'",
+]
+
+[tasks.down]
+description = "Delete the cluster"
+run = "kind delete cluster --name $CLUSTER"

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Pod CIDR routes on a worker (no tunnel)"
+source "$LAB_ROOT/lib/lab.sh"
+
+cilium status --wait
+echo "--- pod CIDR routes on ${CLUSTER}-worker:"
+docker exec "${CLUSTER}-worker" ip route | grep 10.244
+echo "Then: cilium connectivity test"
+echo "Behind a proxy / no direct internet? Skip the world tests:"
+echo "  cilium connectivity test --test '!pod-to-world,!pod-to-cidr,!to-entities-world,!to-fqdns'"

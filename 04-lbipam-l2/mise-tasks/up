@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="LB-IPAM + L2 announcements on the docker bridge"
+#MISE depends=["//:preflight"]
+source "$LAB_ROOT/lib/lab.sh"
+
+kind_up
+cilium_up
+PREFIX="$(kind_subnet | cut -d. -f1,2)"; export PREFIX
+wait_crds ciliumloadbalancerippools.cilium.io ciliuml2announcementpolicies.cilium.io
+envsubst < l2.yaml.tpl | kubectl apply -f -
+kubectl apply -f ../common/demo-lb.yaml
+mise run check

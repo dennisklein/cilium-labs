@@ -1,0 +1,7 @@
+[env]
+CLUSTER = "lab"
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.down]
+description = "Delete the cluster"
+run = "kind delete cluster --name $CLUSTER"

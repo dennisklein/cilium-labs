@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="IPv4 + IPv6 pods and Services, native routing for both families"
+#MISE depends=["//:preflight"]
+source "$LAB_ROOT/lib/lab.sh"
+
+kind_up
+docker network inspect kind -f '{{.EnableIPv6}}' 2>/dev/null | grep -q true \
+  || echo "WARNING: could not confirm IPv6 on the docker 'kind' network (see README)."
+
+# Use the control plane's IPv4 address for the API server: avoids the name resolving to IPv6 first
+API_HOST="$(docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' "${CLUSTER}-control-plane")"
+cilium_up
+
+kubectl apply -f demo.yaml
+kubectl wait --for=condition=Ready pod --all --timeout=120s
+mise run check
