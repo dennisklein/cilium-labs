@@ -4,11 +4,11 @@ kind: Pod
 metadata: {name: client-egress, labels: {egress: "true"}}
 spec:
   nodeSelector: {kubernetes.io/hostname: egress-worker3}
-  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]
+  containers: [{name: curl, image: "curlimages/curl:8.23.0", command: ["sleep", "infinity"]}]
 ---
 apiVersion: v1
 kind: Pod
 metadata: {name: client-plain}
 spec:
   nodeSelector: {kubernetes.io/hostname: egress-worker3}
-  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]
+  containers: [{name: curl, image: "curlimages/curl:8.23.0", command: ["sleep", "infinity"]}]

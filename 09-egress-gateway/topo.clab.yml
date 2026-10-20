@@ -11,7 +11,7 @@ topology:
         - ip addr add 10.30.3.254/24 dev eth3
     server:                      # the "outside world": logs the source IP of every request
       kind: linux
-      image: nginx:1.27-alpine
+      image: nginx:1.31-alpine
       exec:
         - ip addr add 10.30.2.2/24 dev eth1
         - ip route add 10.30.0.0/16 via 10.30.2.254
