@@ -15,7 +15,7 @@ spec:
               topologyKey: kubernetes.io/hostname
               labelSelector: {matchLabels: {app: web}}
       containers:
-      - {name: nginx, image: "nginx:1.27-alpine", ports: [{containerPort: 80}]}
+      - {name: nginx, image: "nginx:1.31-alpine", ports: [{containerPort: 80}]}
 ---
 apiVersion: v1
 kind: Service
@@ -30,4 +30,4 @@ apiVersion: v1
 kind: Pod
 metadata: {name: client}
 spec:
-  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]
+  containers: [{name: curl, image: "curlimages/curl:8.23.0", command: ["sleep", "infinity"]}]

@@ -6,7 +6,7 @@ topology:
   nodes:
     frr:
       kind: linux
-      image: quay.io/frrouting/frr:10.2.1
+      image: quay.io/frrouting/frr:10.7.1
       mgmt-ipv4: ${FRR_IP}
       binds:
         - ./build/frr.conf:/etc/frr/frr.conf

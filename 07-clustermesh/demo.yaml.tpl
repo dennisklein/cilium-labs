@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
       - name: echo
-        image: hashicorp/http-echo:1.0
+        image: hashicorp/http-echo:1.0.0
         args: ["-text=hello from ${NAME}"]
         ports: [{containerPort: 5678}]
 ---
@@ -28,4 +28,4 @@ apiVersion: v1
 kind: Pod
 metadata: {name: client}
 spec:
-  containers: [{name: curl, image: "curlimages/curl:8.10.1", command: ["sleep", "infinity"]}]
+  containers: [{name: curl, image: "curlimages/curl:8.23.0", command: ["sleep", "infinity"]}]
