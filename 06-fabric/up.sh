@@ -8,7 +8,7 @@ k label node fabric-worker2 rack=2 --overwrite
 wait_crds ciliumbgpclusterconfigs.cilium.io ciliumloadbalancerippools.cilium.io
 k apply -f ../common/pool-10.200.yaml -f bgp.yaml -f ../common/demo-lb.yaml
 
-sudo containerlab deploy -t topo.clab.yml --reconfigure
+clab deploy -t topo.clab.yml --reconfigure
 
 # Address the kind-node side of each uplink (containerlab only injects eth1)
 wire() { # <container> <ip/31> <leaf ip>

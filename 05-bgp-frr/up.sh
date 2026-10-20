@@ -11,7 +11,7 @@ wait_crds ciliumbgpclusterconfigs.cilium.io ciliumbgppeerconfigs.cilium.io ciliu
 envsubst '${FRR_IP}' < bgp.yaml.tpl | k apply -f -
 k apply -f ../common/pool-10.200.yaml -f ../common/demo-lb.yaml
 envsubst '${KIND_SUBNET} ${FRR_IP}' < topo.clab.yml.tpl > topo.clab.yml   # rendered here: no `sudo -E` needed
-sudo containerlab deploy -t topo.clab.yml --reconfigure
+clab deploy -t topo.clab.yml --reconfigure
 for i in $(seq 30); do   # wait for the first session instead of a blind sleep
   docker exec clab-bgp-lab-frr vtysh -c 'show bgp summary json' 2>/dev/null | grep -q Established && break
   sleep 2

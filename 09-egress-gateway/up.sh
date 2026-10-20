@@ -10,7 +10,7 @@ k label node egress-worker2 egress-gw=b --overwrite
 wait_crds ciliumegressgatewaypolicies.cilium.io
 k apply -f demo.yaml
 
-sudo containerlab deploy -t topo.clab.yml --reconfigure
+clab deploy -t topo.clab.yml --reconfigure
 
 # Gateway side: uplink address + the egress IP (must exist on the node) + route to the server network
 wire() { # <container> <uplink ip> <egress ip> <router ip>
