@@ -16,23 +16,20 @@ Run `./NN-xxx/up.sh`, experiment, then `./NN-xxx/down.sh`. One stage at a time (
 
 ### Quick start
 
-* Use the wrapper installation script:
+* Install [mise](https://mise.jdx.dev/), then, in this directory:
 ```
-./install-tools.sh 
+mise trust && mise install
+eval "$(mise activate bash)"   # or: mise x -- ./01-basic/up.sh
 ```
-* It will perform a user-level install of:
-  - `kubectl`;
-  - `kind`;
-  - `helm`;
-  - `cilium-cli`;
-  - `containerlab`: only if root is available;
-  - `jq`
-* It will also check for `docker/envsubst/inotify`.
+* `mise.toml` is the single source of truth:
+  - `[tools]`: `kubectl`, `kind`, `helm`, `cilium-cli`, `jq`, `containerlab`, each pinned to an exact version;
+  - `[env]`: `CILIUM_VERSION` and `CLUSTER`, read by `common.sh`.
+* Docker and `envsubst` (gettext) come from the OS, not from mise.
 
 ### Tools required to run the labs
 
 * `docker, kind, kubectl, helm, envsubst` (gettext): all labs;
-* `containerlab`: labs 05/06;
+* `containerlab`: labs 05/06/09;
 * `cilium-cli` + `jq`: lab 07.
 
 ### Recommendations (nice to have)
@@ -41,10 +38,10 @@ Run `./NN-xxx/up.sh`, experiment, then `./NN-xxx/down.sh`. One stage at a time (
 
 ### Notes
 
-* Pinned: Cilium 1.18.0 (CILIUM_VERSION env), FRR 10.2.1.
+* Pinned: Cilium and tool versions in `mise.toml`; FRR 10.7.1 in the topology files.
 * `kind` commands need `--name <cluster>` (or `export KIND_CLUSTER_NAME=lab`); `kind get clusters` lists all.
 * If labs are launched on a host behind a proxy: put the docker subnet(s) and `10.244.0.0/16, 10.96.0.0/12, 10.200.0.0/24` in `NO_PROXY` (proper CIDRs, e.g. 172.18.0.0/16). Pods don't use the proxy, so skip the connectivity tests that need direct internet (see [03-native-routing](03-native-routing/up.sh)).
-* Labs 05/06 run `sudo containerlab` without `-E`; the topology is rendered with `envsubst` beforehand.
+* Labs 05/06/09 run containerlab with `sudo` (through `clab` in `common.sh`, which passes the mise binary path) without `-E`; the topology is rendered with `envsubst` beforehand.
 * After editing an FRR config, destroy and redeploy the lab (destroy, re-render, deploy).
 
 #### Cluster Mesh troubleshooting (stage 07)
@@ -62,5 +59,5 @@ Each lab has its own README (scope, verify commands, gotchas, official docs).
 - kind: https://kind.sigs.k8s.io/docs/user/quick-start/ , configuration https://kind.sigs.k8s.io/docs/user/configuration/ , known issues https://kind.sigs.k8s.io/docs/user/known-issues/
 - Cilium on kind: https://docs.cilium.io/en/stable/installation/kind/ , Helm values https://docs.cilium.io/en/stable/helm-reference/
 - containerlab: https://containerlab.dev/ , kinds https://containerlab.dev/manual/kinds/
-- Version note: the labs pin Cilium 1.18.0, while `docs.cilium.io/en/stable/` tracks a newer release.
-  If a page or CRD apiVersion differs from what you see in the lab, replace `stable` by `v1.18` in the URL.
+- Version note: `docs.cilium.io/en/stable/` tracks the latest release. If the pinned `CILIUM_VERSION` in `mise.toml`
+  is older, replace `stable` by the matching minor (for example `v1.20`) in the URL.

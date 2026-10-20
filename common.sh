@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # Sourced by every stage's up.sh / down.sh
 set -euo pipefail
-export CILIUM_VERSION="${CILIUM_VERSION:-1.18.0}"   # bump to latest 1.18.x patch if you like
-export CLUSTER="${CLUSTER:-lab}"                    # must match `name:` in the stage's kind.yaml
+# Versions and CLUSTER come from mise.toml [env]; tools come from mise.toml [tools].
+: "${CILIUM_VERSION:?not set: run the stage inside the mise environment (mise activate, or mise x -- ./NN-xxx/up.sh)}"
+: "${CLUSTER:?not set: run the stage inside the mise environment}"
 
 for t in docker kind kubectl helm envsubst; do
-  command -v "$t" >/dev/null || { echo "missing prerequisite: $t"; exit 1; }
+  command -v "$t" >/dev/null || { echo "missing prerequisite: $t (mise install; docker and envsubst come from the OS)"; exit 1; }
 done
+
+# sudo resets PATH, so pass the mise-managed binary by absolute path
+clab() { sudo "$(command -v containerlab)" "$@"; }
 
 k() { kubectl --context "kind-${CLUSTER}" "$@"; }
 

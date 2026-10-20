@@ -1,0 +1,12 @@
+# Toolchain and environment for the Cilium labs. Run `mise install` once; `mise activate` (or `mise run`/`mise x`) loads [env].
+[tools]
+kubectl = "1.37.1"
+kind = "0.33.0"
+helm = "4.3.1"
+cilium-cli = "0.20.1"
+jq = "1.8.2"
+"github:srl-labs/containerlab" = "0.81.1"
+
+[env]
+CILIUM_VERSION = "1.20.3"
+CLUSTER = "lab"   # must match `name:` in the stage's kind.yaml
