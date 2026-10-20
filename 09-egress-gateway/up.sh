@@ -4,7 +4,7 @@ command -v containerlab >/dev/null || { echo "missing containerlab"; exit 1; }
 SRV=clab-cilium-egress-server
 
 kind_up kind.yaml
-cilium_install values.yaml
+cilium install --context "kind-${CLUSTER}" --version "$CILIUM_VERSION" --values values.yaml --set k8sServiceHost="${CLUSTER}-control-plane" --set k8sServicePort=6443
 k label node egress-worker  egress-gw=a --overwrite
 k label node egress-worker2 egress-gw=b --overwrite
 wait_crds ciliumegressgatewaypolicies.cilium.io

@@ -2,7 +2,7 @@
 cd "$(dirname "$0")"; source ../common.sh
 command -v containerlab >/dev/null || { echo "missing containerlab"; exit 1; }
 kind_up kind.yaml
-cilium_install values.yaml
+cilium install --context "kind-${CLUSTER}" --version "$CILIUM_VERSION" --values values.yaml --set k8sServiceHost="${CLUSTER}-control-plane" --set k8sServicePort=6443
 export KIND_SUBNET="$(kind_subnet)"
 export FRR_IP="$(echo "$KIND_SUBNET" | cut -d. -f1,2).0.100"
 envsubst < frr/frr.conf.tpl > build/frr.conf

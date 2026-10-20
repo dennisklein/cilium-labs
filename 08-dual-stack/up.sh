@@ -6,7 +6,7 @@ docker network inspect kind -f '{{.EnableIPv6}}' 2>/dev/null | grep -q true \
 
 # Use the control plane's IPv4 address for the API server: avoids the name resolving to IPv6 first
 CPIP="$(docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' "${CLUSTER}-control-plane")"
-cilium_install values.yaml --set k8sServiceHost="$CPIP"
+cilium install --context "kind-${CLUSTER}" --version "$CILIUM_VERSION" --values values.yaml --set k8sServiceHost="$CPIP" --set k8sServicePort=6443
 
 k apply -f demo.yaml
 k wait --for=condition=Ready pod --all --timeout=120s

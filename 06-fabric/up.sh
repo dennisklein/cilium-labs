@@ -2,7 +2,7 @@
 cd "$(dirname "$0")"; export CLUSTER=fabric; source ../common.sh
 command -v containerlab >/dev/null || { echo "missing containerlab"; exit 1; }
 kind_up kind.yaml
-cilium_install values.yaml
+cilium install --context "kind-${CLUSTER}" --version "$CILIUM_VERSION" --values values.yaml --set k8sServiceHost="${CLUSTER}-control-plane" --set k8sServicePort=6443
 k label node fabric-worker  rack=1 --overwrite
 k label node fabric-worker2 rack=2 --overwrite
 wait_crds ciliumbgpclusterconfigs.cilium.io ciliumloadbalancerippools.cilium.io
