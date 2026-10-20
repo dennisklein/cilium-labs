@@ -11,11 +11,12 @@ still running. Use it as the baseline every other lab builds on.
 
 **Run / verify / tear down**
 ```bash
-./up.sh
+mise run up
+mise run check   # the probes only; run again at any time
 cilium status --wait
 kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep -i routing   # Network: Tunnel [vxlan]
-cilium connectivity test        # behind a proxy / no direct internet: see ../03-native-routing/up.sh for the skip filter
-./down.sh
+cilium connectivity test        # behind a proxy / no direct internet: see ../03-native-routing/mise-tasks/check for the skip filter
+mise run down
 ```
 
 **Gotchas**

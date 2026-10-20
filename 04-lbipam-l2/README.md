@@ -10,10 +10,11 @@
 
 **Run / verify / tear down**
 ```bash
-./up.sh                                    # prints the LB IP and curls it
+mise run up                                    # prints the LB IP and curls it
+mise run check   # the probes only; run again at any time
 kubectl get svc web
 kubectl -n kube-system get lease | grep -i l2    # which node announces the IP
-./down.sh
+mise run down
 ```
 
 **Gotchas**

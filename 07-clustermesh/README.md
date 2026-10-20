@@ -10,11 +10,12 @@ load-balances across the pods of *both* clusters.
 
 **Run / verify / tear down**
 ```bash
-./up.sh                                          # ends with OK once replies come from both clusters
+mise run up                                          # ends with OK once replies come from both clusters
+mise run check   # the probes only; run again at any time
 cilium clustermesh status --context kind-mesh1
 cilium clustermesh status --context kind-mesh2
 kubectl --context kind-mesh1 exec client -- curl -s http://echo:5678
-./down.sh
+mise run down
 ```
 
 **Gotchas (hit during testing)**

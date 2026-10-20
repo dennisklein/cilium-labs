@@ -18,12 +18,13 @@ and an external `server` (nginx) sits behind the router and logs the source IP o
 
 **Run / verify / tear down**
 ```bash
-./up.sh     # 1) no policy -> unreachable (000)   2) via gateway A -> server logs 10.30.1.100
+mise run up     # 1) no policy -> unreachable (000)   2) via gateway A -> server logs 10.30.1.100
+mise run check   # the probes only; run again at any time
             # 3) via gateway B -> server logs 10.30.3.100; the unlabeled client stays unreachable
 kubectl exec client-egress -- curl -s -m 3 http://10.30.2.2
 docker logs clab-cilium-egress-server 2>&1 | tail
 kubectl -n kube-system exec ds/cilium -- cilium-dbg bpf egress list
-./down.sh
+mise run down
 ```
 
 **Gotchas**
@@ -32,7 +33,7 @@ kubectl -n kube-system exec ds/cilium -- cilium-dbg bpf egress list
 - The server network is only routable from the gateway nodes, so the lab proves the redirect: an unselected pod can't reach it at all.
 - A policy whose `egressIP` is not configured on the selected gateway makes it drop matching traffic.
 - Uses VXLAN tunnel mode, the commonly documented path. Native routing hasn't been tried here.
-- `up.sh` restarts the agents after wiring `eth1` so `devices: eth+` picks the uplink up. IPv4 only.
+- The `up` task restarts the agents after wiring `eth1` so `devices: eth+` picks the uplink up. IPv4 only.
 
 **Docs**
 - Egress Gateway: https://docs.cilium.io/en/stable/network/egress-gateway/egress-gateway/

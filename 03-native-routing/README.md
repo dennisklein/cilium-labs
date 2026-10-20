@@ -10,10 +10,11 @@ share one L2 segment (the Docker bridge). BPF masquerading is enabled for traffi
 
 **Run / verify / tear down**
 ```bash
-./up.sh
+mise run up
+mise run check   # the probes only; run again at any time
 docker exec lab-worker ip route | grep 10.244     # one route per remote node, via its 172.18.x.x address
 cilium connectivity test --test '!pod-to-world,!pod-to-cidr,!to-entities-world,!to-fqdns'
-./down.sh
+mise run down
 ```
 
 **Gotchas**
