@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Curl the LoadBalancer IP from the host"
+source "$LAB_ROOT/lib/lab.sh"
+
+IP=""
+for _ in $(seq 30); do   # wait for LB-IPAM to assign the IP
+  IP=$(kubectl get svc web -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  [ -n "$IP" ] && break
+  sleep 2
+done
+echo "LB IP: $IP  -> curl from the host (Linux, same docker bridge):"
+curl -s -m 5 "http://$IP" | head -n 4 || echo "not reachable yet; check the L2 announcement leases: kubectl -n kube-system get lease | grep l2"

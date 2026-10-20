@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="L7 policy: GET is allowed, POST is denied"
+source "$LAB_ROOT/lib/lab.sh"
+
+echo "--- allowed:";  kubectl -n demo exec client -- curl -s -o /dev/null -w '%{http_code}\n' http://server/
+echo "--- denied (expect 403 from L7 proxy):"
+kubectl -n demo exec client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://server/
+echo "Hubble UI: cilium hubble ui   |  flows: hubble observe -n demo"

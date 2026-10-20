@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Per-family pod and Service probes, IPv6 routes"
+source "$LAB_ROOT/lib/lab.sh"
+
+echo "--- pods (node and both IPs)"
+kubectl get pods -o custom-columns='NAME:.metadata.name,NODE:.spec.nodeName,IPS:.status.podIPs[*].ip'
+echo "--- Service cluster IPs (expect one IPv4 and one IPv6)"
+kubectl get svc web -o jsonpath='{.spec.clusterIPs}{"\n"}'
+echo "--- client -> every web pod, per family (expect 200)"
+for ip in $(kubectl get pods -l app=web -o jsonpath='{.items[*].status.podIPs[*].ip}'); do
+  case "$ip" in *:*) url="http://[$ip]" ;; *) url="http://$ip" ;; esac
+  printf '%-30s ' "$ip"
+  kubectl exec client -- curl -s -o /dev/null -m 3 -w '%{http_code}\n' "$url" || echo FAIL
+done
+echo "--- via the Service name, forced family (expect 200)"
+for f in 4 6; do
+  printf 'IPv%s: ' "$f"
+  kubectl exec client -- curl "-$f" -s -o /dev/null -m 3 -w '%{http_code}\n' http://web || echo FAIL
+done
+echo "--- IPv6 pod-CIDR routes on a worker (native routing, one per remote node)"
+docker exec "${CLUSTER}-worker" ip -6 route | grep fd00:10:244 || true

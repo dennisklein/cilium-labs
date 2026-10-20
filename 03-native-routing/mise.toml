@@ -1,0 +1,13 @@
+[env]
+CLUSTER = "lab"
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.up]
+description = "No tunnel, native routing, BPF masquerade"
+depends = ["//:preflight"]
+shell = "bash -c"
+run = "source $LAB_ROOT/lib/lab.sh; kind_up; cilium_up; mise run check"
+
+[tasks.down]
+description = "Delete the cluster"
+run = "kind delete cluster --name $CLUSTER"
