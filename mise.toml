@@ -1,4 +1,11 @@
-# Toolchain and environment for the Cilium labs. Run `mise install` once; `mise activate` (or `mise run`/`mise x`) loads [env].
+# Toolchain, environment and task root for the Cilium labs. Run `mise install` once.
+# Each stage folder (NN-*) has its own mise.toml with CLUSTER, KUBECONFIG and the tasks up/check/down.
+min_version = "2026.10.0"
+monorepo_root = true
+
+[monorepo]
+config_roots = ["0*"]
+
 [tools]
 kubectl = "latest"
 kind = "latest"
@@ -12,3 +19,19 @@ envsubst = "latest"
 [env]
 CILIUM_VERSION = "1.20.3"
 CLUSTER = "lab"   # must match `name:` in the stage's kind.yaml
+LAB_ROOT = "{{config_root}}"   # stage tasks source $LAB_ROOT/lib/lab.sh
+
+[tasks.preflight]
+description = "Check that the docker daemon is reachable"
+hide = true
+run = "docker info >/dev/null"
+
+[tasks.sudo]
+description = "Ask for the sudo password before a containerlab stage starts"
+hide = true
+raw = true
+run = "sudo -v"
+
+[tasks.down-all]
+description = "Tear down every stage, one at a time"
+run = "mise run --jobs 1 '//...:down'"
