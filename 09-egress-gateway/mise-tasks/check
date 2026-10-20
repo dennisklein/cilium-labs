@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Walk through: no policy, gateway A, then gateway B (applies the policies)"
+source "$LAB_ROOT/lib/lab.sh"
+SRV=clab-cilium-egress-server
+
+try() { kubectl exec "$1" -- curl -s -o /dev/null -m 3 -w '%{http_code}' http://10.30.2.2 2>/dev/null || true; }
+wait_ok() { for _ in $(seq 15); do [ "$(try client-egress)" = 200 ] && return 0; sleep 2; done; return 1; }
+
+kubectl delete -f policy-a.yaml -f policy-b.yaml --ignore-not-found >/dev/null   # start without a policy
+sleep 2
+echo "--- 1) no policy: the server network is only routable from the gateway nodes (expect 000 = unreachable)"
+echo "client-egress: $(try client-egress)"
+echo "--- 2) policy via gateway A (egress IP 10.30.1.100)"
+kubectl apply -f policy-a.yaml
+wait_ok && echo "client-egress: 200" || echo "client-egress: FAILED (see README)"
+echo "client-plain (not selected): $(try client-plain)"
+echo "server saw:"; docker logs "$SRV" 2>&1 | tail -n 2
+echo "--- 3) move to gateway B (egress IP 10.30.3.100)"
+kubectl delete -f policy-a.yaml >/dev/null; kubectl apply -f policy-b.yaml
+sleep 5; wait_ok && echo "client-egress: 200" || echo "client-egress: FAILED (see README)"
+echo "server saw:"; docker logs "$SRV" 2>&1 | tail -n 2
+echo "--- datapath entries"
+kubectl -n kube-system exec ds/cilium -- cilium-dbg bpf egress list

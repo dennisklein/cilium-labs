@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="BGP on the spine, client reaches the LB IP via the fabric"
+source "$LAB_ROOT/lib/lab.sh"
+SPINE=clab-cilium-fabric-spine
+
+wait_bgp "$SPINE"
+sleep 5
+docker exec "$SPINE" vtysh -c 'show bgp summary'
+docker exec "$SPINE" vtysh -c 'show ip route bgp'
+IP=$(kubectl get svc web -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "--- client -> LB IP $IP via the fabric:"
+docker exec clab-cilium-fabric-client curl -s -m 5 "http://$IP" | head -n 4

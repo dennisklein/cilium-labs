@@ -1,0 +1,13 @@
+[env]
+CLUSTER = "lab"
+KUBECONFIG = "{{config_root}}/build/kubeconfig"
+
+[tasks.down]
+description = "Destroy the containerlab lab, then the cluster"
+depends = ["//:sudo"]
+shell = "bash -c"
+run = """
+source $LAB_ROOT/lib/lab.sh
+if [ -f build/topo.clab.yml ]; then clab destroy -t build/topo.clab.yml --cleanup || true; fi
+kind delete cluster --name $CLUSTER
+"""
