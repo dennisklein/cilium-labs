@@ -238,13 +238,141 @@ The test names can change between Cilium versions. Use `cilium connectivity test
 
 ## Experiments
 
-- Look at the VXLAN interface on a node: `docker exec basic-worker ip -d link show cilium_vxlan`.
-- See the tunnel traffic. Start a pod on each worker, send a ping between them, and capture on the bridge
-  side of a node: `docker exec basic-worker tcpdump -ni eth0 udp port 8472`. (Install `tcpdump` in the node
-  container first: `docker exec basic-worker apt-get install -y tcpdump`, if the node has network access.)
-- Show the Helm values that cilium-cli used: `helm -n kube-system get values cilium`.
-- Show the Cilium endpoints (one for each pod) on a node:
-  `kubectl -n kube-system exec ds/cilium -- cilium-dbg endpoint list`.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state.
+
+### Experiment 1: Examine the VXLAN interface
+
+1. Show the details of the VXLAN interface on a node:
+
+   ```bash
+   docker exec basic-worker ip -d link show cilium_vxlan
+   ```
+
+   Expected output (example, part):
+
+   ```
+   5: cilium_vxlan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN ...
+       vxlan external id 0 srcport 0 0 dstport 8472 nolearning ...
+   ```
+
+   - `external`: the interface has no fixed remote address. The eBPF program sets the remote node for each
+     packet.
+   - `dstport 8472`: the UDP port of the tunnel.
+
+### Experiment 2: Capture the tunnel traffic
+
+1. Start a server pod on `basic-worker` and a client pod on `basic-worker2`:
+
+   ```bash
+   kubectl run srv --image=nginx:1.31-alpine --overrides='{"spec":{"nodeName":"basic-worker"}}'
+   kubectl run cli --image=curlimages/curl:8.23.0 --overrides='{"spec":{"nodeName":"basic-worker2"}}' \
+     --command -- sleep infinity
+   kubectl wait --for=condition=Ready pod/srv pod/cli
+   SRV=$(kubectl get pod srv -o jsonpath='{.status.podIP}'); echo "$SRV"
+   ```
+
+2. In a second terminal, capture the VXLAN packets on `eth0` of `basic-worker`. The kind node image has no
+   `tcpdump`. Thus, start a `netshoot` container in the network namespace of the node container:
+
+   ```bash
+   docker run --rm --net container:basic-worker nicolaka/netshoot tcpdump -ni eth0 -c 4 udp port 8472
+   ```
+
+3. In the first terminal, send a request from `cli` to `srv`:
+
+   ```bash
+   kubectl exec cli -- curl -s -o /dev/null -w '%{http_code}\n' "http://$SRV"
+   ```
+
+   Expected output: `200`.
+
+4. Examine the capture in the second terminal. Expected output (example):
+
+   ```
+   IP 172.18.0.4.51234 > 172.18.0.2.8472: VXLAN, flags [I] (0x08), vni 6789
+   IP 10.244.2.14.41234 > 10.244.1.9.80: Flags [S], seq 1234567890, win 64240, length 0
+   IP 172.18.0.2.40001 > 172.18.0.4.8472: VXLAN, flags [I] (0x08), vni 4321
+   IP 10.244.1.9.80 > 10.244.2.14.41234: Flags [S.], seq 987654321, ack 1234567891, win 65160, length 0
+   ```
+
+   Each VXLAN packet has two IP headers. The outer header has the node addresses (`172.18.0.x`). The inner
+   header has the pod addresses (`10.244.x.x`). The `vni` is the security identity of the source pod.
+   `tcpdump` stops after 4 packets.
+
+5. Delete the pods:
+
+   ```bash
+   kubectl delete pod srv cli
+   ```
+
+### Experiment 3: Examine the values that cilium-cli set
+
+1. Show the Helm values of the release `cilium`:
+
+   ```bash
+   helm -n kube-system get values cilium
+   ```
+
+   Expected output (example):
+
+   ```
+   USER-SUPPLIED VALUES:
+   cluster:
+     name: kind-basic
+   ipam:
+     mode: kubernetes
+   operator:
+     replicas: 1
+   routingMode: tunnel
+   tunnelProtocol: vxlan
+   ```
+
+   This stage has no `values.yaml`. Thus, all these values come from cilium-cli.
+
+2. Show the agent configuration that Helm made from these values:
+
+   ```bash
+   cilium config view | grep -E '^(ipam|routing-mode|tunnel-protocol|kube-proxy-replacement) '
+   ```
+
+   Expected output:
+
+   ```
+   ipam                       kubernetes
+   kube-proxy-replacement     false
+   routing-mode               tunnel
+   tunnel-protocol            vxlan
+   ```
+
+### Experiment 4: Examine the Cilium endpoints of a node
+
+1. Find the Cilium agent pod on `basic-worker`:
+
+   ```bash
+   AGENT=$(kubectl -n kube-system get pod -l k8s-app=cilium \
+     --field-selector spec.nodeName=basic-worker -o name); echo "$AGENT"
+   ```
+
+2. Show the endpoints of this agent:
+
+   ```bash
+   kubectl -n kube-system exec "$AGENT" -- cilium-dbg endpoint list
+   ```
+
+   Expected output (example, shortened):
+
+   ```
+   ENDPOINT   POLICY (ingress)   POLICY (egress)   IDENTITY   LABELS (source:key[=value])          IPv4         STATUS
+              ENFORCEMENT        ENFORCEMENT
+   285        Disabled           Disabled          1          reserved:host                                     ready
+   1012       Disabled           Disabled          4          reserved:health                      10.244.1.77  ready
+   3021       Disabled           Disabled          31512      k8s:io.kubernetes.pod.namespace=...  10.244.1.12  ready
+   ```
+
+   - Each pod on the node is one endpoint. The host and the health check are endpoints too.
+   - `IDENTITY` is the security identity. Pods with the same labels have the same identity.
+   - `POLICY ... Disabled`: no network policy selects the endpoint. Stage 02 adds a policy.
 
 ## Troubleshooting
 

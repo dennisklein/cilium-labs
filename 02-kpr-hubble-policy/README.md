@@ -286,10 +286,120 @@ Interface: cilium_wg0
 
 ## Experiments
 
-- Change the L7 rule to allow `POST` too. Apply `demo.yaml` again and send the POST request.
-- Delete the policy (`kubectl -n demo delete cnp client-get-only`). Then the `other` pod can connect.
-- Remove the `encryption` block from `values.yaml` and apply it to the running cluster:
-  `cilium upgrade --values values.yaml`. Then `cilium-dbg status` shows `Encryption: Disabled`.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state.
+
+### Experiment 1: Allow POST in the L7 rule
+
+1. Apply a changed policy that allows `GET` and `POST` on `/`:
+
+   ```bash
+   kubectl apply -f - <<'EOF'
+   apiVersion: cilium.io/v2
+   kind: CiliumNetworkPolicy
+   metadata: {name: client-get-only, namespace: demo}
+   spec:
+     endpointSelector: {matchLabels: {app: server}}
+     ingress:
+     - fromEndpoints: [{matchLabels: {app: client}}]
+       toPorts:
+       - ports: [{port: "80", protocol: TCP}]
+         rules:
+           http:
+           - {method: "GET", path: "/"}
+           - {method: "POST", path: "/"}
+   EOF
+   ```
+
+2. Send the POST request again:
+
+   ```bash
+   kubectl -n demo exec client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://server/
+   ```
+
+   Expected output: `405`. Envoy now lets the request through. nginx sends `405 Not Allowed`, because it
+   does not accept POST for a static file. The code is not `403`, so Envoy did not block the request.
+
+3. Restore the initial policy:
+
+   ```bash
+   kubectl apply -f demo.yaml
+   ```
+
+### Experiment 2: Delete the policy
+
+1. Delete the policy:
+
+   ```bash
+   kubectl -n demo delete cnp client-get-only
+   ```
+
+2. Send a request from a pod without the label `app=client`:
+
+   ```bash
+   kubectl -n demo run other --rm -i --restart=Never --image=curlimages/curl:8.23.0 --command -- \
+     curl -s -m 3 -o /dev/null -w '%{http_code}\n' http://server/
+   ```
+
+   Expected output: `200`. Without a policy, all pods can connect to the server.
+
+3. Send the POST request from the client:
+
+   ```bash
+   kubectl -n demo exec client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://server/
+   ```
+
+   Expected output: `405` from nginx.
+
+4. Show the last flows (open `cilium hubble port-forward` in a second terminal first):
+
+   ```bash
+   hubble observe -n demo --last 10
+   ```
+
+   The flows show only L3/L4 information (`TCP Flags`), no `http-request` lines. Cilium sends traffic through
+   Envoy only for ports with an L7 rule. Thus, without the policy, Hubble sees no HTTP data.
+
+5. Restore the policy:
+
+   ```bash
+   kubectl apply -f demo.yaml
+   ```
+
+### Experiment 3: Turn off WireGuard
+
+`cilium upgrade` changes the Helm release in the running cluster. Give the running Cilium version with
+`--version`. Without it, `cilium upgrade` uses the cilium-cli default, which can be an older version.
+
+1. Find the running Cilium version:
+
+   ```bash
+   V=$(helm -n kube-system list -o json | jq -r '.[] | select(.name=="cilium") | .app_version'); echo "$V"
+   ```
+
+2. Turn off the encryption. `--reuse-values` keeps all other values:
+
+   ```bash
+   cilium upgrade --version "$V" --reuse-values --set encryption.enabled=false
+   kubectl -n kube-system rollout status ds/cilium
+   ```
+
+3. Examine the encryption status:
+
+   ```bash
+   kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep -i encryption
+   ```
+
+   Expected output: `Encryption:              Disabled`.
+
+4. Turn on the encryption again:
+
+   ```bash
+   cilium upgrade --version "$V" --reuse-values --set encryption.enabled=true
+   kubectl -n kube-system rollout status ds/cilium
+   ```
+
+5. Do step 3 again. Expected output: `Encryption: Wireguard [...]`.
 
 ## Troubleshooting
 

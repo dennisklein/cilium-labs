@@ -222,10 +222,130 @@ each request to one of the three `web` pods, also to pods on other nodes.
 
 ## Experiments
 
-- Make a second LoadBalancer Service (`kubectl expose deploy web --name web2 --type LoadBalancer --port 80`).
-  It gets the next address from the pool and can have a different lease holder.
-- Request a specific address with the annotation `lbipam.cilium.io/ips: "172.18.255.240"` on a Service.
-- Add `serviceSelector` to the policy, so that only Services with a label get an announcement.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state. The experiments use the variable `PREFIX`. Set it first:
+
+```bash
+PREFIX=$(docker network inspect kind -f '{{range .IPAM.Config}}{{println .Subnet}}{{end}}' \
+  | grep -v ':' | head -n1 | cut -d. -f1,2); echo "$PREFIX"
+```
+
+### Experiment 1: Add a second LoadBalancer Service
+
+1. Make a second Service for the Deployment `web`:
+
+   ```bash
+   kubectl expose deploy web --name web2 --type LoadBalancer --port 80
+   ```
+
+2. Show the two Services and their leases:
+
+   ```bash
+   kubectl get svc web web2
+   kubectl -n kube-system get lease | grep l2announce
+   ```
+
+   `web2` gets the next free address of the pool (for example `172.18.255.201`). It has its own lease. The
+   lease holder can be a different node than for `web`.
+
+3. Send a request to the new address:
+
+   ```bash
+   IP2=$(kubectl get svc web2 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   curl -s -o /dev/null -w '%{http_code}\n' "http://$IP2"
+   ```
+
+   Expected output: `200`.
+
+4. Delete the Service:
+
+   ```bash
+   kubectl delete svc web2
+   ```
+
+### Experiment 2: Request a specific address
+
+1. Make a Service that requests the address `<PREFIX>.255.240` with the annotation `lbipam.cilium.io/ips`:
+
+   ```bash
+   kubectl apply -f - <<EOF
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: web-fixed
+     annotations: {lbipam.cilium.io/ips: "${PREFIX}.255.240"}
+   spec:
+     type: LoadBalancer
+     selector: {app: web}
+     ports: [{port: 80, targetPort: 80}]
+   EOF
+   ```
+
+2. Show the address and send a request:
+
+   ```bash
+   kubectl get svc web-fixed
+   curl -s -o /dev/null -w '%{http_code}\n' "http://${PREFIX}.255.240"
+   ```
+
+   Expected output: `EXTERNAL-IP` is `<PREFIX>.255.240`, and curl gives `200`.
+
+3. Delete the Service:
+
+   ```bash
+   kubectl delete svc web-fixed
+   ```
+
+### Experiment 3: Announce only Services with a label
+
+1. Apply a changed policy with a `serviceSelector`. It selects only Services with the label `announce=yes`:
+
+   ```bash
+   kubectl apply -f - <<'EOF'
+   apiVersion: cilium.io/v2alpha1
+   kind: CiliumL2AnnouncementPolicy
+   metadata: {name: lab-l2}
+   spec:
+     serviceSelector: {matchLabels: {announce: "yes"}}
+     loadBalancerIPs: true
+     interfaces: ["^eth[0-9]+"]
+   EOF
+   ```
+
+2. Show the leases:
+
+   ```bash
+   kubectl -n kube-system get lease | grep l2announce
+   ```
+
+   Expected output: no lease for `web`. No node answers ARP for its address now.
+
+3. Remove the old ARP entry on the host. Then send a request:
+
+   ```bash
+   IP=$(kubectl get svc web -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   sudo ip neigh flush to "$IP"
+   curl -s -m 3 -o /dev/null -w '%{http_code}\n' "http://$IP"
+   ```
+
+   Expected output: `000`. The host gets no ARP reply.
+
+4. Put the label on the Service. Then send the request again:
+
+   ```bash
+   kubectl label svc web announce=yes
+   sleep 5
+   curl -s -m 3 -o /dev/null -w '%{http_code}\n' "http://$IP"
+   ```
+
+   Expected output: `200`. A node has the lease again.
+
+5. Restore the policy and remove the label:
+
+   ```bash
+   PREFIX=$PREFIX envsubst < l2.yaml.tpl | kubectl apply -f -
+   kubectl label svc web announce-
+   ```
 
 ## Troubleshooting
 

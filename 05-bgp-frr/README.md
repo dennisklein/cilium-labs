@@ -246,18 +246,111 @@ FRR has the BGP routes.
 
 ## Experiments
 
-- **Node failure.** Stop a node: `docker stop bgp-worker2`. After the hold time (9 seconds), FRR removes the
-  session and the next hop. Do `show ip route bgp` again. Start the node: `docker start bgp-worker2`.
-- **Only nodes with a backend.** Set `externalTrafficPolicy: Local` on the Service:
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state.
 
-  ```bash
-  kubectl patch svc web -p '{"spec":{"externalTrafficPolicy":"Local"}}'
-  ```
+### Experiment 1: Stop a node
 
-  Then only the nodes with a `web` pod advertise the LB IP address. The control plane has no `web` pod, so
-  its next hop goes away.
-- **Graceful restart.** Restart the agents (`kubectl -n kube-system rollout restart ds/cilium`). FRR keeps the
-  routes during the restart, because graceful restart is on.
+1. Show the next hops of the LB IP address in FRR:
+
+   ```bash
+   docker exec clab-bgp-lab-frr vtysh -c 'show ip route 10.200.0.10/32'
+   ```
+
+   Expected output: four next hops, one for each node.
+
+2. Stop a node:
+
+   ```bash
+   docker stop bgp-worker2
+   ```
+
+3. Wait 10 seconds (more than the hold time of 9 seconds). Then show the sessions and the next hops:
+
+   ```bash
+   docker exec clab-bgp-lab-frr vtysh -c 'show bgp summary'
+   docker exec clab-bgp-lab-frr vtysh -c 'show ip route 10.200.0.10/32'
+   ```
+
+   Expected output: the session to the address of `bgp-worker2` is gone. The route has three next hops.
+
+4. Send a request from FRR:
+
+   ```bash
+   docker exec clab-bgp-lab-frr wget -qO- -T3 http://10.200.0.10 | head -n 4
+   ```
+
+   The request works, because three nodes still advertise the address.
+
+5. Start the node again and wait until it is ready:
+
+   ```bash
+   docker start bgp-worker2
+   kubectl wait --for=condition=Ready node/bgp-worker2 --timeout=180s
+   ```
+
+6. Do step 1 again. Expected output: four next hops.
+
+### Experiment 2: Advertise only from nodes with a backend
+
+1. Show the nodes of the `web` pods:
+
+   ```bash
+   kubectl get pods -l app=web -o wide
+   ```
+
+2. Set `externalTrafficPolicy: Local` on the Service:
+
+   ```bash
+   kubectl patch svc web -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+   ```
+
+3. Wait some seconds. Then show the next hops:
+
+   ```bash
+   docker exec clab-bgp-lab-frr vtysh -c 'show ip route 10.200.0.10/32'
+   ```
+
+   Expected output: only the nodes from step 1 are next hops. The control plane has no `web` pod, so it does
+   not advertise the address. With `Local`, a node sends the traffic only to its local pods. Thus, it keeps the
+   source address of the client.
+
+4. Restore the policy:
+
+   ```bash
+   kubectl patch svc web -p '{"spec":{"externalTrafficPolicy":"Cluster"}}'
+   ```
+
+### Experiment 3: Restart the agents with graceful restart
+
+1. In a second terminal, count the next hops of the LB IP address each second:
+
+   ```bash
+   while true; do
+     docker exec clab-bgp-lab-frr vtysh -c 'show ip route 10.200.0.10/32' | grep -c via
+     sleep 1
+   done
+   ```
+
+   Expected output: `4` each second.
+
+2. In the first terminal, restart the Cilium agents:
+
+   ```bash
+   kubectl -n kube-system rollout restart ds/cilium
+   kubectl -n kube-system rollout status ds/cilium
+   ```
+
+3. Examine the second terminal. The count stays at `4`. When an agent restarts, FRR keeps its routes for up to
+   15 seconds (`restartTimeSeconds`), until the session is up again.
+
+4. Show the graceful restart state of a session:
+
+   ```bash
+   docker exec clab-bgp-lab-frr vtysh -c 'show bgp neighbors' | grep -A3 'Graceful restart information'
+   ```
+
+5. Stop the loop in the second terminal with `Ctrl+C`.
 
 ## Troubleshooting
 

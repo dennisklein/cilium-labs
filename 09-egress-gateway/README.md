@@ -203,13 +203,122 @@ kubectl -n kube-system exec ds/cilium -- cilium-dbg bpf egress list
 
 ## Experiments
 
-- **Gateway failure.** With policy B active, stop the gateway: `docker stop egress-worker2`. The traffic of
-  `client-egress` stops, because the policy selects only that node. Start it again with
-  `docker start egress-worker2`.
-- **Select the interface, not the address.** In policy A, remove `egressIP` and set `interface: eth1`. Cilium
-  then uses the first IPv4 address of `eth1` on the gateway (`10.30.1.1`). The server log shows this address.
-- **Wrong egress IP.** Set `egressIP: 10.30.1.200` in policy A (an address that is not on the node) and apply
-  it. The traffic of `client-egress` stops.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with policy A active.
+Thus, start each experiment with policy A:
+
+```bash
+kubectl apply -f policy-a.yaml
+```
+
+The experiments use this function. It sends one request from `client-egress` and shows the last line of the
+server log:
+
+```bash
+probe() {
+  kubectl exec client-egress -- curl -s -m 3 -o /dev/null -w '%{http_code}\n' http://10.30.2.2 || true
+  docker logs clab-cilium-egress-server 2>&1 | tail -n 1
+}
+```
+
+### Experiment 1: Disconnect the gateway uplink
+
+1. Send a request:
+
+   ```bash
+   probe
+   ```
+
+   Expected output: `200`, and the log line starts with `10.30.1.100`.
+
+2. Set the uplink of gateway A to down:
+
+   ```bash
+   docker exec egress-worker ip link set eth1 down
+   ```
+
+3. Do step 1 again. Expected output: `000`, and no new log line. The policy selects only gateway A, so Cilium
+   continues to send the traffic to it. There is no failover to gateway B.
+
+4. Set the uplink to up again. The kernel removed the route when the link went down. Thus, add the route again:
+
+   ```bash
+   docker exec egress-worker ip link set eth1 up
+   docker exec egress-worker ip route replace 10.30.2.0/24 via 10.30.1.254 dev eth1
+   ```
+
+5. Do step 1 again. Expected output: `200`.
+
+### Experiment 2: Select the interface, not the address
+
+1. Apply a policy that has `interface: eth1` instead of `egressIP`:
+
+   ```bash
+   kubectl apply -f - <<'EOF'
+   apiVersion: cilium.io/v2
+   kind: CiliumEgressGatewayPolicy
+   metadata: {name: via-gateway}
+   spec:
+     selectors:
+     - podSelector:
+         matchLabels: {egress: "true"}
+     destinationCIDRs: ["10.30.2.0/24"]
+     egressGateway:
+       nodeSelector:
+         matchLabels: {egress-gw: "a"}
+       interface: eth1
+   EOF
+   ```
+
+2. Wait some seconds. Then send a request:
+
+   ```bash
+   probe
+   ```
+
+   Expected output: `200`, and the log line starts with `10.30.1.1`. Cilium uses the first IPv4 address of
+   `eth1`, which is the uplink address, not the egress IP `10.30.1.100`.
+
+3. Restore policy A:
+
+   ```bash
+   kubectl apply -f policy-a.yaml
+   ```
+
+### Experiment 3: Use an egress IP that is not on the gateway
+
+1. Apply a policy with the egress IP `10.30.1.200`. This address is not on `egress-worker`:
+
+   ```bash
+   kubectl apply -f - <<'EOF'
+   apiVersion: cilium.io/v2
+   kind: CiliumEgressGatewayPolicy
+   metadata: {name: via-gateway}
+   spec:
+     selectors:
+     - podSelector:
+         matchLabels: {egress: "true"}
+     destinationCIDRs: ["10.30.2.0/24"]
+     egressGateway:
+       nodeSelector:
+         matchLabels: {egress-gw: "a"}
+       egressIP: 10.30.1.200
+   EOF
+   ```
+
+2. Wait some seconds. Then send a request:
+
+   ```bash
+   probe
+   ```
+
+   Expected output: `000`, and no new log line. The gateway drops the traffic, because it cannot use an
+   address that it does not have.
+
+3. Restore policy A:
+
+   ```bash
+   kubectl apply -f policy-a.yaml
+   ```
 
 ## Troubleshooting
 

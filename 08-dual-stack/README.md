@@ -188,9 +188,76 @@ The connectivity test examines IPv6 too, because Cilium has IPv6 on.
 
 ## Experiments
 
-- Change the Service to `ipFamilyPolicy: SingleStack` with `ipFamilies: [IPv6]`. You must delete and make the
-  Service again, because Kubernetes does not let you change the primary family of a Service.
-- Show the IPv6 neighbor table of a node: `docker exec dual-worker ip -6 neigh`.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state.
+
+### Experiment 1: Make an IPv6-only Service
+
+1. Make a single-stack IPv6 Service for the `web` pods:
+
+   ```bash
+   kubectl apply -f - <<'EOF'
+   apiVersion: v1
+   kind: Service
+   metadata: {name: web6}
+   spec:
+     ipFamilyPolicy: SingleStack
+     ipFamilies: [IPv6]
+     selector: {app: web}
+     ports: [{port: 80, targetPort: 80}]
+   EOF
+   ```
+
+2. Show the ClusterIPs:
+
+   ```bash
+   kubectl get svc web6 -o jsonpath='{.spec.clusterIPs}{"\n"}'
+   ```
+
+   Expected output: one IPv6 address, for example `["fd00:10:96::5a2b"]`.
+
+3. Send requests for each family:
+
+   ```bash
+   kubectl exec client -- curl -6 -s -m 3 -o /dev/null -w '%{http_code}\n' http://web6
+   kubectl exec client -- curl -4 -s -m 3 -o /dev/null -w '%{http_code}\n' http://web6
+   ```
+
+   Expected output: `200` for IPv6. `000` for IPv4, because the name `web6` has no `A` record.
+
+4. Try to change the primary family of the dual-stack Service `web`:
+
+   ```bash
+   kubectl patch svc web -p '{"spec":{"ipFamilies":["IPv6","IPv4"]}}'
+   ```
+
+   Expected output: an error. Kubernetes does not let you change `ipFamilies[0]` of an existing Service. To
+   change it, delete the Service and make it again.
+
+5. Delete the IPv6 Service:
+
+   ```bash
+   kubectl delete svc web6
+   ```
+
+### Experiment 2: Examine the IPv6 neighbors of a node
+
+1. Show the IPv6 neighbor table of `dual-worker`:
+
+   ```bash
+   docker exec dual-worker ip -6 neigh show dev eth0
+   ```
+
+   Expected output (example):
+
+   ```
+   fc00:f853:ccd:e793::3 lladdr 02:42:ac:12:00:03 router REACHABLE
+   fc00:f853:ccd:e793::4 lladdr 02:42:ac:12:00:04 router REACHABLE
+   fe80::1 lladdr 02:42:9e:00:00:01 router STALE
+   ```
+
+   The other nodes are neighbors on `eth0`. They are the next hops of the IPv6 pod CIDR routes (step 1 of the
+   procedure). IPv6 uses neighbor discovery (NDP), not ARP.
 
 ## Troubleshooting
 

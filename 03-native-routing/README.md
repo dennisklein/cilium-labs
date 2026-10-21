@@ -161,28 +161,42 @@ Expected output: `Device "cilium_vxlan" does not exist.`
    kubectl run b --image=curlimages/curl:8.23.0 --overrides='{"spec":{"nodeName":"native-worker2"}}' \
      --command -- sleep infinity
    kubectl wait --for=condition=Ready pod/a pod/b
-   kubectl get pod a -o wide
+   A=$(kubectl get pod a -o jsonpath='{.status.podIP}'); echo "$A"
    ```
 
-2. Send a request from `b` to `a`. Use the pod IP address of `a`:
+2. In a second terminal, capture the HTTP packets on `eth0` of `native-worker`. The kind node image has no
+   `tcpdump`. Thus, start a `netshoot` container in the network namespace of the node container:
 
    ```bash
-   kubectl exec b -- curl -s -o /dev/null -w '%{http_code}\n' http://<IP of a>
+   docker run --rm --net container:native-worker nicolaka/netshoot tcpdump -ni eth0 -c 4 tcp port 80
+   ```
+
+3. In the first terminal, send a request from `b` to `a`:
+
+   ```bash
+   kubectl exec b -- curl -s -o /dev/null -w '%{http_code}\n' "http://$A"
    ```
 
    Expected output: `200`.
 
-3. (Optional) Capture the packets on the node of `a`. The capture shows the pod IP addresses, not node
-   addresses in a VXLAN header:
+4. Examine the capture in the second terminal. Expected output (example):
 
-   ```bash
-   docker exec native-worker tcpdump -ni eth0 tcp port 80
+   ```
+   IP 10.244.2.14.41234 > 10.244.1.9.80: Flags [S], seq 1234567890, win 64240, length 0
+   IP 10.244.1.9.80 > 10.244.2.14.41234: Flags [S.], seq 987654321, ack 1234567891, win 65160, length 0
+   IP 10.244.2.14.41234 > 10.244.1.9.80: Flags [.], ack 1, win 502, length 0
+   IP 10.244.2.14.41234 > 10.244.1.9.80: Flags [P.], seq 1:75, ack 1, win 502, length 74: HTTP: GET / HTTP/1.1
    ```
 
-   `tcpdump` is not in the kind node image. Install it first if the node has network access:
-   `docker exec native-worker sh -c 'apt-get update && apt-get install -y tcpdump'`.
+   The packets on `eth0` have the pod IP addresses. There is no VXLAN header (compare with experiment 2 of
+   stage [01](../01-basic/README.md#experiment-2-capture-the-tunnel-traffic)). `tcpdump` stops after 4
+   packets.
 
-4. Delete the pods: `kubectl delete pod a b`.
+5. Delete the pods:
+
+   ```bash
+   kubectl delete pod a b
+   ```
 
 ### Step 4: Do the connectivity test
 
@@ -200,10 +214,90 @@ The test names can change between Cilium versions. Use `cilium connectivity test
 
 ## Experiments
 
-- Stop a worker (`docker stop native-worker3`). After some time, the other nodes remove the route to its pod
-  CIDR. Start it again with `docker start native-worker3`.
-- Set `ipv4NativeRoutingCIDR` to `10.244.0.0/24` and do `cilium upgrade --values values.yaml`. Then pods on
-  other nodes see the node IP address as the source address. Use `hubble observe` to see this.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the cluster in its
+initial state.
+
+### Experiment 1: Remove a node and see its route go
+
+1. Show the pod CIDR routes on `native-worker`:
+
+   ```bash
+   docker exec native-worker ip route | grep 10.244
+   kubectl get node native-worker3 -o jsonpath='{.spec.podCIDR}{"\n"}'
+   ```
+
+   One of the routes goes to the pod CIDR of `native-worker3`.
+
+2. Delete the node object of `native-worker3`. The container continues to run:
+
+   ```bash
+   kubectl delete node native-worker3
+   ```
+
+3. Show the routes again:
+
+   ```bash
+   docker exec native-worker ip route | grep 10.244
+   ```
+
+   The route to the pod CIDR of `native-worker3` is not there now. The Cilium agents remove the route when the
+   node goes out of the cluster.
+
+4. Restart the kubelet on `native-worker3`. The kubelet registers the node again:
+
+   ```bash
+   docker exec native-worker3 systemctl restart kubelet
+   kubectl wait --for=condition=Ready node/native-worker3 --timeout=120s
+   ```
+
+5. Do step 3 again. The route is there again. The node can get a different pod CIDR than before.
+
+### Experiment 2: Make ipv4NativeRoutingCIDR too small
+
+In this experiment, `ipv4NativeRoutingCIDR` covers only one `/24`. Then Cilium does SNAT for pod traffic to
+the other pod CIDRs. The nginx access log shows the source address that the server sees.
+
+1. Start a server pod and a client pod on two workers:
+
+   ```bash
+   kubectl run a --image=nginx:1.31-alpine --overrides='{"spec":{"nodeName":"native-worker"}}'
+   kubectl run b --image=curlimages/curl:8.23.0 --overrides='{"spec":{"nodeName":"native-worker2"}}' \
+     --command -- sleep infinity
+   kubectl wait --for=condition=Ready pod/a pod/b
+   kubectl get pod a b -o wide
+   A=$(kubectl get pod a -o jsonpath='{.status.podIP}')
+   ```
+
+   If the IP address of `a` or `b` is in `10.244.0.0/24`, use different workers. Only the pod CIDRs outside of
+   `10.244.0.0/24` show the effect.
+
+2. Send a request and show the source address in the log of `a`:
+
+   ```bash
+   kubectl exec b -- curl -s -o /dev/null http://$A
+   kubectl logs a | tail -n 1
+   ```
+
+   Expected output: the line starts with the pod IP address of `b` (for example `10.244.2.14`). No SNAT.
+
+3. Find the running Cilium version. Then set `ipv4NativeRoutingCIDR` to `10.244.0.0/24`:
+
+   ```bash
+   V=$(helm -n kube-system list -o json | jq -r '.[] | select(.name=="cilium") | .app_version')
+   cilium upgrade --version "$V" --reuse-values --set ipv4NativeRoutingCIDR=10.244.0.0/24
+   kubectl -n kube-system rollout status ds/cilium
+   ```
+
+4. Do step 2 again. Expected output: the line starts with the node IP address of `native-worker2` (for example
+   `172.18.0.3`). Cilium did SNAT, because the destination is not in `ipv4NativeRoutingCIDR`.
+
+5. Restore the value and delete the pods:
+
+   ```bash
+   cilium upgrade --version "$V" --reuse-values --set ipv4NativeRoutingCIDR=10.244.0.0/16
+   kubectl -n kube-system rollout status ds/cilium
+   kubectl delete pod a b
+   ```
 
 ## Troubleshooting
 

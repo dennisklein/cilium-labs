@@ -243,12 +243,106 @@ The trace shows the spine (`10.10.20.1`), a leaf (`10.10.10.1` or `10.10.10.3`),
 
 ## Experiments
 
-- **Rack failure.** Stop leaf1: `docker stop clab-cilium-fabric-leaf1`. The spine keeps one next hop for the LB
-  IP address (via leaf2). The client still gets a reply. Start leaf1 again.
-- **Remove the return route.** `docker exec fabric-worker ip route del 10.10.20.0/24`. Then requests that the
-  spine sends to rack 1 time out. Run `mise run up` again, or add the route again by hand.
-- **Only nodes with a backend.** Scale `web` to one replica and set `externalTrafficPolicy: Local`. Then only
-  one rack advertises the LB IP address.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the lab in its
+initial state.
+
+### Experiment 1: Disconnect rack 1 from the spine
+
+1. Show the next hops of the LB IP address on the spine:
+
+   ```bash
+   docker exec clab-cilium-fabric-spine vtysh -c 'show ip route 10.200.0.10/32'
+   ```
+
+   Expected output: two next hops, `10.10.10.1` (leaf1) and `10.10.10.3` (leaf2).
+
+2. Set the spine link of leaf1 to down:
+
+   ```bash
+   docker exec clab-cilium-fabric-leaf1 ip link set eth1 down
+   ```
+
+3. Do step 1 again. Expected output: one next hop, `10.10.10.3` (leaf2). The link is down, so FRR on the spine
+   closes the session to leaf1 at once.
+
+4. Send requests from the client:
+
+   ```bash
+   for i in $(seq 5); do
+     docker exec clab-cilium-fabric-client curl -s -m 2 -o /dev/null -w '%{http_code}\n' http://10.200.0.10
+   done
+   ```
+
+   Expected output: `200` five times. All traffic goes through rack 2.
+
+5. Set the link to up again and reset the BGP sessions of leaf1, so that it connects at once:
+
+   ```bash
+   docker exec clab-cilium-fabric-leaf1 ip link set eth1 up
+   docker exec clab-cilium-fabric-leaf1 vtysh -c 'clear bgp *'
+   ```
+
+6. Wait some seconds. Then do step 1 again. Expected output: two next hops.
+
+### Experiment 2: Remove the return route of rack 1
+
+1. Remove the return route on `fabric-worker`:
+
+   ```bash
+   docker exec fabric-worker ip route del 10.10.20.0/24
+   ```
+
+2. Send ten requests from the client. Each request uses a new source port, so ECMP can select a different
+   rack:
+
+   ```bash
+   for i in $(seq 10); do
+     docker exec clab-cilium-fabric-client curl -s -m 2 -o /dev/null -w '%{http_code}\n' http://10.200.0.10
+   done
+   ```
+
+   Expected output: a mix of `200` and `000`. The requests through rack 1 arrive at `fabric-worker`, but the
+   replies go out on `eth0` and do not come back to the client.
+
+3. Add the return route again:
+
+   ```bash
+   docker exec fabric-worker ip route replace 10.10.20.0/24 via 10.10.1.0 dev eth1
+   ```
+
+4. Do step 2 again. Expected output: `200` ten times.
+
+### Experiment 3: Advertise only from the rack with a backend
+
+1. Scale `web` to one replica and show its node:
+
+   ```bash
+   kubectl scale deploy web --replicas=1
+   kubectl rollout status deploy web
+   kubectl get pods -l app=web -o wide
+   ```
+
+2. Set `externalTrafficPolicy: Local` on the Service:
+
+   ```bash
+   kubectl patch svc web -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+   ```
+
+3. Wait some seconds. Then show the next hops on the spine:
+
+   ```bash
+   docker exec clab-cilium-fabric-spine vtysh -c 'show ip route 10.200.0.10/32'
+   ```
+
+   Expected output: one next hop, the leaf of the rack with the `web` pod. The node of the other rack has no
+   local backend. Thus, it does not advertise the address.
+
+4. Restore the Service and the Deployment:
+
+   ```bash
+   kubectl patch svc web -p '{"spec":{"externalTrafficPolicy":"Cluster"}}'
+   kubectl scale deploy web --replicas=3
+   ```
 
 ## Troubleshooting
 

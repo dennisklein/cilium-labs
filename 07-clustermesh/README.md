@@ -206,11 +206,76 @@ Expected output (example, part):
 
 ## Experiments
 
-- **Local preference.** Add the annotation `service.cilium.io/affinity: "local"` to the Service in both
-  clusters. Then each cluster uses its local backends first and the remote backends only if there is no local
-  backend.
-- **Remove a cluster from a Service.** Set `service.cilium.io/shared: "false"` on the Service in `mesh2`. Then
-  `mesh2` does not export its backends, but it still uses the backends of `mesh1`.
+Do the experiments after the procedure, in the sequence below. Each experiment ends with the clusters in their
+initial state. Each experiment uses this function. It sends 20 requests from the client in one cluster and
+counts the replies:
+
+```bash
+ask() { for i in $(seq 20); do kubectl --context "kind-$1" exec client -- curl -s http://echo:5678; done | sort | uniq -c; }
+```
+
+### Experiment 1: Prefer the local backends
+
+1. Put the annotation `service.cilium.io/affinity: "local"` on the Service in both clusters:
+
+   ```bash
+   for n in 1 2; do
+     kubectl --context kind-mesh$n annotate svc echo service.cilium.io/affinity=local
+   done
+   ```
+
+2. Send requests from `mesh1`:
+
+   ```bash
+   ask mesh1
+   ```
+
+   Expected output: `20 hello from mesh1`. The local backends are healthy, so Cilium uses only them.
+
+3. Scale `echo` in `mesh1` to zero. Then send the requests again:
+
+   ```bash
+   kubectl --context kind-mesh1 scale deploy echo --replicas=0
+   sleep 5
+   ask mesh1
+   ```
+
+   Expected output: `20 hello from mesh2`. There is no local backend, so Cilium uses the remote backends.
+
+4. Restore the Deployment and remove the annotation:
+
+   ```bash
+   kubectl --context kind-mesh1 scale deploy echo --replicas=2
+   for n in 1 2; do
+     kubectl --context kind-mesh$n annotate svc echo service.cilium.io/affinity-
+   done
+   ```
+
+### Experiment 2: Stop the export of one cluster
+
+1. Put the annotation `service.cilium.io/shared: "false"` on the Service in `mesh2`:
+
+   ```bash
+   kubectl --context kind-mesh2 annotate svc echo service.cilium.io/shared=false
+   ```
+
+2. Send requests from both clusters:
+
+   ```bash
+   ask mesh1
+   ask mesh2
+   ```
+
+   Expected output:
+
+   - From `mesh1`: only `hello from mesh1`. `mesh2` does not export its backends.
+   - From `mesh2`: `hello from mesh1` and `hello from mesh2`. `mesh2` still uses the backends of `mesh1`.
+
+3. Remove the annotation:
+
+   ```bash
+   kubectl --context kind-mesh2 annotate svc echo service.cilium.io/shared-
+   ```
 
 ## Troubleshooting
 
