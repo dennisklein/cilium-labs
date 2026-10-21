@@ -1,43 +1,276 @@
 # 06 – Leaf/spine fabric around kind (containerlab `ext-container`)
 
-**Scope.** Two kind workers are wired with point-to-point links (`eth1`) into a small FRR fabric, and an
-external **client** sits behind the spine. Cilium advertises pod CIDRs and LB IPs to the leaves; the client reaches
-the `LoadBalancer` IP across the fabric with ECMP. East-west pod traffic stays on `eth0` (native routing).
+## Purpose
+
+In stage [05](../05-bgp-frr/README.md), all nodes and the router were on one Docker bridge. A real data center
+has racks. Each rack has a leaf switch, and spine switches connect the leaves. This stage builds a small
+leaf/spine fabric with FRR. Each kind worker gets an uplink to the leaf of its rack. An external client behind
+the spine reaches a LoadBalancer IP address through the fabric.
+
+When you complete this stage, you know:
+
+- How containerlab connects existing kind node containers to a lab (`kind: ext-container`).
+- Why each rack needs its own `CiliumBGPClusterConfig`.
+- How the spine uses ECMP across two leaves with different AS numbers.
+- Why the nodes need a static return route to the client network.
+- How north-south traffic (fabric) and east-west traffic (Docker bridge) use different interfaces.
+
+## Concepts
+
+### Leaf/spine
 
 ```
-            client 10.10.20.2
-                 |
-              spine  AS 65000
-             /          \
-      leaf1 AS 65101   leaf2 AS 65102
-           |                |
-     fabric-worker     fabric-worker2      (Cilium, AS 65001, rack=1 / rack=2)
+                          client 10.10.20.2
+                                |  10.10.20.0/24
+                         spine  AS 65000
+                     eth1 /            \ eth2
+          10.10.10.0/31  /              \  10.10.10.2/31
+                        /                \
+           leaf1 AS 65101                leaf2 AS 65102
+               | eth2 10.10.1.0/31           | eth2 10.10.2.0/31
+               |                             |
+               | eth1 10.10.1.1              | eth1 10.10.2.1
+     fabric-worker (rack 1)          fabric-worker2 (rack 2)
+     Cilium AS 65001                 Cilium AS 65001
+               \_____________________________/
+                 eth0: docker network kind (east-west, native routing)
 ```
 
-**What you learn**
-- Connecting existing kind node containers to containerlab with `kind: ext-container` links.
-- One `CiliumBGPClusterConfig` per rack (node selector `rack=1|2`) because each rack peers with a different leaf.
-- Why the nodes need a return route to the client network via `eth1`.
+Each link is a point-to-point `/31` network (two addresses, no network or broadcast address). Each router has
+its own AS number. All sessions are eBGP.
 
-**Run / verify / tear down**
+| Session | Side A | Side B |
+|---------|--------|--------|
+| spine - leaf1 | 10.10.10.0 (AS 65000) | 10.10.10.1 (AS 65101) |
+| spine - leaf2 | 10.10.10.2 (AS 65000) | 10.10.10.3 (AS 65102) |
+| leaf1 - fabric-worker | 10.10.1.0 (AS 65101) | 10.10.1.1 (AS 65001) |
+| leaf2 - fabric-worker2 | 10.10.2.0 (AS 65102) | 10.10.2.1 (AS 65001) |
+
+The control plane has no uplink and no BGP session.
+
+### containerlab `ext-container`
+
+containerlab usually makes all lab nodes. With `kind: ext-container`, it uses a container that exists already.
+Here these are the kind node containers. containerlab only adds the veth links (`eth1`) to them:
+
+```yaml
+nodes:
+  fabric-worker:  {kind: ext-container}   # must be the exact container name
+  fabric-worker2: {kind: ext-container}
+links:
+  - endpoints: ["leaf1:eth2", "fabric-worker:eth1"]
+  - endpoints: ["leaf2:eth2", "fabric-worker2:eth1"]
+```
+
+containerlab does not configure addresses in `ext-container` nodes. Thus, the `up` task does this with
+`docker exec` (function `wire`).
+
+### One cluster config for each rack
+
+A `CiliumBGPClusterConfig` has one list of peers for all selected nodes. The two racks have different peers
+(leaf1 and leaf2). Thus, the stage has two cluster configs. A node label selects the config:
+
+```
+ node label rack=1  -->  CiliumBGPClusterConfig rack1  -->  peer leaf1 10.10.1.0 AS 65101
+ node label rack=2  -->  CiliumBGPClusterConfig rack2  -->  peer leaf2 10.10.2.0 AS 65102
+                                       \                 /
+                                CiliumBGPPeerConfig peer  -->  CiliumBGPAdvertisement adverts
+                                                               (PodCIDR, LoadBalancerIP)
+```
+
+A node can be in only one cluster config. Keep the selectors disjoint.
+
+### ECMP on the spine
+
+Both racks advertise the LB IP address. The spine gets two paths with different AS paths:
+
+```
+ 10.200.0.10/32  via leaf1: AS path 65101 65001
+                 via leaf2: AS path 65102 65001
+```
+
+By default, BGP uses more than one path only if the AS paths are the same. `bgp bestpath as-path
+multipath-relax` lets the spine use both paths, because the paths have the same length. `maximum-paths 4`
+permits up to four next hops.
+
+### The return route
+
+Cilium BGP sends routes to the leaves, but it does not install the routes that it receives. Thus, the nodes do
+not know the client network `10.10.20.0/24`. Without help, a reply to the client goes through `eth0` (default
+route to the Docker bridge) and does not arrive. The `up` task adds a static route on each worker:
+
+```
+ fabric-worker:   10.10.20.0/24 via 10.10.1.0 dev eth1
+ fabric-worker2:  10.10.20.0/24 via 10.10.2.0 dev eth1
+```
+
+### North-south and east-west
+
+```
+ client -> spine -> leaf1 -> fabric-worker eth1          (north-south, fabric)
+                                 |
+                                 | eBPF load balancer selects a web pod
+                                 v
+                      pod on fabric-worker2 via eth0     (east-west, Docker bridge, native routing)
+```
+
+If the backend pod is on a different node, the receiving node sends the packet over `eth0` and changes the
+source address to its own address (SNAT). The reply comes back to the receiving node. Then the node sends the
+reply to the client through `eth1`.
+
+`devices: "eth+"` in `values.yaml` tells Cilium to attach its eBPF programs to `eth0` and `eth1`. Without
+this, Cilium does not process the LB traffic that arrives on `eth1`. `eth1` exists only after
+`clab deploy`. Thus, the `up` task restarts the Cilium agents after it configures `eth1`.
+
+## Lab topology
+
+| Item | Value |
+|------|-------|
+| Cluster name | `fabric` |
+| Nodes | `fabric-control-plane`, `fabric-worker` (rack 1), `fabric-worker2` (rack 2) |
+| Routing | native, `autoDirectNodeRoutes` on `eth0` |
+| Fabric | containerlab `cilium-fabric`: `spine`, `leaf1`, `leaf2` (FRR 10.7.1), `client` (netshoot) |
+| LB pool | `10.200.0.10` - `10.200.0.250` (`../common/pool-10.200.yaml`) |
+| Demo | Deployment and LoadBalancer Service `web` (`../common/demo-lb.yaml`) |
+
+## Files
+
+| File | Content |
+|------|---------|
+| `kind.yaml` | Control plane and two workers, no default CNI, no kube-proxy. |
+| `values.yaml` | Native routing, `devices: eth+`, `bgpControlPlane.enabled`. |
+| `bgp.yaml` | Cluster configs `rack1` and `rack2`, peer config, advertisement. |
+| `topo.clab.yml` | Fabric nodes, addresses, the two `ext-container` nodes and the links. |
+| `frr/spine.conf`, `frr/leaf1.conf`, `frr/leaf2.conf` | FRR BGP configuration of each router. |
+| `mise-tasks/up` | Cluster, Cilium, labels, BGP resources, demo, containerlab, node wiring, agent restart, `check`. |
+| `mise-tasks/check` | Waits for BGP on the spine, shows sessions and routes, sends a request from the client. |
+
+## Prerequisites
+
+- containerlab (from `mise.toml`).
+- `sudo` access. The `up` and `down` tasks ask for the password first.
+
+## Procedure
+
+Do the steps in the stage folder (`06-fabric/`).
+
+### Step 1: Start the lab
+
 ```bash
-mise run up                                           # ends with client -> LB IP via the fabric
-mise run check   # the probes only; run again at any time
-docker exec clab-cilium-fabric-spine vtysh -c 'show ip route bgp'
+mise run up
+```
+
+The `up` task does these steps:
+
+```
+ sudo -v
+ kind_up, cilium_up
+ kubectl label node fabric-worker rack=1, fabric-worker2 rack=2
+ wait_crds, apply pool, bgp.yaml, demo
+ clab deploy -t topo.clab.yml          spine, leaves, client, links to the workers
+ wire fabric-worker   10.10.1.1/31, route 10.10.20.0/24 via 10.10.1.0
+ wire fabric-worker2  10.10.2.1/31, route 10.10.20.0/24 via 10.10.2.0
+ kubectl -n kube-system rollout restart ds/cilium      (Cilium finds eth1)
+ mise run check
+```
+
+Expected output of the check (example, shortened):
+
+```
+Neighbor        V    AS   MsgRcvd   MsgSent   Up/Down State/PfxRcd   PfxSnt Desc
+10.10.10.1      4 65101        30        28  00:01:10            4        5 N/A
+10.10.10.3      4 65102        30        28  00:01:10            4        5 N/A
+...
+B>* 10.10.1.0/31 [20/0] via 10.10.10.1, eth1, weight 1, 00:01:10
+B>* 10.10.2.0/31 [20/0] via 10.10.10.3, eth2, weight 1, 00:01:10
+B>* 10.200.0.10/32 [20/0] via 10.10.10.1, eth1, weight 1, 00:00:30
+  *                       via 10.10.10.3, eth2, weight 1, 00:00:30
+B>* 10.244.1.0/24 [20/0] via 10.10.10.1, eth1, weight 1, 00:00:30
+B>* 10.244.2.0/24 [20/0] via 10.10.10.3, eth2, weight 1, 00:00:30
+--- client -> LB IP 10.200.0.10 via the fabric:
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+```
+
+The LB IP address has two next hops (ECMP). Each pod CIDR has one next hop: the leaf of its rack.
+
+### Step 2: Examine the sessions of the nodes
+
+```bash
 cilium bgp peers
+```
+
+Expected output (example):
+
+```
+Node             Local AS   Peer AS   Peer Address   Session State   Uptime   Family         Received   Advertised
+fabric-worker    65001      65101     10.10.1.0      established     2m       ipv4/unicast   6          2
+fabric-worker2   65001      65102     10.10.2.0      established     2m       ipv4/unicast   6          2
+```
+
+The control plane is not in the list, because it has no `rack` label. `Received` is more than 0, but Cilium
+does not install these routes.
+
+### Step 3: Examine the uplink of a node
+
+```bash
+docker exec fabric-worker ip addr show eth1
+docker exec fabric-worker ip route | grep -E '10.10|10.244'
+```
+
+Expected output (part):
+
+```
+    inet 10.10.1.1/31 scope global eth1
+10.10.1.0/31 dev eth1 proto kernel scope link src 10.10.1.1
+10.10.20.0/24 via 10.10.1.0 dev eth1
+10.244.0.0/24 via 172.18.0.x dev eth0
+10.244.2.0/24 via 172.18.0.y dev eth0
+```
+
+The route to the client goes through `eth1`. The routes to the other pod CIDRs go through `eth0`.
+
+### Step 4: Send requests from the client
+
+```bash
+docker exec clab-cilium-fabric-client curl -s -m 5 http://10.200.0.10 | head -n 4
+docker exec clab-cilium-fabric-client traceroute -n 10.200.0.10
+```
+
+The trace shows the spine (`10.10.20.1`), a leaf (`10.10.10.1` or `10.10.10.3`), and then the node.
+
+## Experiments
+
+- **Rack failure.** Stop leaf1: `docker stop clab-cilium-fabric-leaf1`. The spine keeps one next hop for the LB
+  IP address (via leaf2). The client still gets a reply. Start leaf1 again.
+- **Remove the return route.** `docker exec fabric-worker ip route del 10.10.20.0/24`. Then requests that the
+  spine sends to rack 1 time out. Run `mise run up` again, or add the route again by hand.
+- **Only nodes with a backend.** Scale `web` to one replica and set `externalTrafficPolicy: Local`. Then only
+  one rack advertises the LB IP address.
+
+## Troubleshooting
+
+| Symptom | Cause | Remedy |
+|---------|-------|--------|
+| `clab deploy` fails: container not found. | The `ext-container` names are wrong. | The names must be `fabric-worker` and `fabric-worker2` (cluster name `fabric`). |
+| No sessions between the nodes and the leaves. | `eth1` has no address, or no `rack` label. | Do `docker exec fabric-worker ip addr show eth1` and `kubectl get nodes -L rack`. |
+| Sessions are up, but the client times out. | No return route, or Cilium does not use `eth1`. | Make sure the return route exists. Do `kubectl -n kube-system rollout restart ds/cilium`. |
+| One node has no BGP instance. | The node is in two cluster configs. | Keep the `rack` selectors disjoint. |
+| A change in an FRR file has no effect. | containerlab does not reload the configuration. | Do `mise run down` and `mise run up`. |
+
+## Clean up
+
+```bash
 mise run down
 ```
 
-**Gotchas**
-- Cilium's BGP Control Plane advertises routes but does not install learned ones, so the fabric carries
-  north-south traffic only.
-- A node can be selected by only **one** `CiliumBGPClusterConfig`; keep the rack selectors disjoint.
-- Node-side addressing (`ip addr` on `eth1`, return route) is done by the `up` task, then the agents are restarted
-  so `devices: eth+` picks up `eth1`.
-- Container names must match exactly (`fabric-worker`, `fabric-worker2`); the cluster is named `fabric`.
+This destroys the containerlab fabric first, then deletes the kind cluster `fabric`.
 
-**Docs**
-- containerlab `ext-container`: https://containerlab.dev/manual/kinds/ext-container
-- containerlab + kind (`k8s-kind`): https://containerlab.dev/manual/kinds/k8s-kind
+## References
+
+- containerlab `ext-container`: https://containerlab.dev/manual/kinds/ext-container/
+- containerlab and kind: https://containerlab.dev/manual/kinds/k8s-kind/
 - Cilium BGP Control Plane: https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/
-- FRR BGP: https://docs.frrouting.org/en/latest/bgp.html
+- FRR BGP (multipath): https://docs.frrouting.org/en/latest/bgp.html
