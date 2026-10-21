@@ -7,11 +7,11 @@ CLUSTER=mesh1 kind_up kind-mesh1.yaml
 CLUSTER=mesh2 kind_up kind-mesh2.yaml
 
 # Shared CA: copy mesh1's CA into mesh2 BEFORE installing Cilium there
-CLUSTER=mesh1 cilium_up --context kind-mesh1 --set cluster.name=mesh1 --set cluster.id=1
+cilium_up --context kind-mesh1 --set cluster.name=mesh1 --set cluster.id=1
 kubectl --context kind-mesh1 -n kube-system get secret cilium-ca -o json \
   | jq 'del(.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields)' \
   | kubectl --context kind-mesh2 -n kube-system apply -f -
-CLUSTER=mesh2 cilium_up --context kind-mesh2 --set cluster.name=mesh2 --set cluster.id=2
+cilium_up --context kind-mesh2 --set cluster.name=mesh2 --set cluster.id=2
 
 cilium clustermesh connect --context kind-mesh1 --destination-context kind-mesh2
 cilium clustermesh status --context kind-mesh1 --wait

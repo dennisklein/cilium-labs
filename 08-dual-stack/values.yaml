@@ -1,11 +1,7 @@
-operator: {replicas: 1}
-ipv4: {enabled: true}
 ipv6: {enabled: true}
-ipam: {mode: kubernetes}
-kubeProxyReplacement: true
 routingMode: native
 ipv4NativeRoutingCIDR: 10.244.0.0/16
 ipv6NativeRoutingCIDR: fd00:10:244::/56   # == kind IPv6 podSubnet
 autoDirectNodeRoutes: true                # installs per-node routes for BOTH families
 bpf: {masquerade: true}
-hubble: {enabled: true, relay: {enabled: true}}
+hubble: {relay: {enabled: true}}

@@ -7,9 +7,11 @@ kind_up() {  # [kind config], default kind.yaml
   kind create cluster --name "$CLUSTER" --config "${1:-kind.yaml}"
 }
 
+# cilium-cli detects kind: ipam.mode=kubernetes, one operator replica, VXLAN tunnel unless
+# routingMode is set; without kube-proxy also kubeProxyReplacement and the real API server address
 cilium_up() {  # extra flags (--set, --context) are passed through
-  cilium install ${CILIUM_VERSION:+--version "$CILIUM_VERSION"} --values values.yaml \
-    --set k8sServiceHost="${API_HOST:-${CLUSTER}-control-plane}" --set k8sServicePort=6443 "$@"
+  local values=(); [ -f values.yaml ] && values=(--values values.yaml)
+  cilium install ${CILIUM_VERSION:+--version "$CILIUM_VERSION"} "${values[@]}" "$@"
 }
 
 # sudo resets PATH, so pass the mise-managed binary by absolute path

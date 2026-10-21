@@ -1,10 +1,5 @@
-operator: {replicas: 1}
-ipam: {mode: kubernetes}
-kubeProxyReplacement: true
 routingMode: native
 ipv4NativeRoutingCIDR: 10.244.0.0/16
 autoDirectNodeRoutes: true
 bpf: {masquerade: true}
 l2announcements: {enabled: true}
-externalIPs: {enabled: true}
-k8sClientRateLimit: {qps: 10, burst: 20}   # L2 leader election is chatty
