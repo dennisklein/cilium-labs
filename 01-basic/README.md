@@ -142,7 +142,7 @@ The `up` task does these steps:
        |
  kind_up           kind create cluster --name basic --config kind.yaml
        |           (kubeconfig goes to build/kubeconfig)
- cilium_up         cilium install
+ cilium_up         cilium install --version <latest stable>
        |           (no values.yaml: only the cilium-cli defaults for kind)
  mise run check    cilium status --wait
 ```
@@ -253,6 +253,7 @@ The test names can change between Cilium versions. Use `cilium connectivity test
 | Nodes stay `NotReady`. | The Cilium agent does not start. | Do `cilium status` and `kubectl -n kube-system logs ds/cilium`. |
 | The *world* connectivity tests time out. | The host has no direct internet access. | Skip the world tests (see step 4). This is not a Cilium problem. |
 | `kind get nodes` shows nothing. | kind uses the cluster name `kind` by default. | Use `kind get nodes --name basic`. |
+| The agents do not start. The log shows `failed to probe helper` and `FnSetRetval: bpf_set_retval R1 is not a scalar`. | Cilium 1.20.1 probes a BPF helper that some kernels reject. Cilium 1.20.2 removed this probe (cilium/cilium#48213). | Use Cilium 1.20.2 or later. Do not set `CILIUM_VERSION` to 1.20.1. See the [Cilium version](../README.md#cilium-version) section. |
 | `kind create cluster` fails, "already exist". | The cluster of this stage exists from an earlier run. | Do `mise run down` first. |
 
 ## Clean up

@@ -10,8 +10,17 @@ kind_up() {  # [kind config], default kind.yaml
 # cilium-cli detects kind: ipam.mode=kubernetes, one operator replica, VXLAN tunnel unless
 # routingMode is set; without kube-proxy also kubeProxyReplacement and the real API server address
 cilium_up() {  # extra flags (--set, --context) are passed through
-  local values=(); [ -f values.yaml ] && values=(--values values.yaml)
-  cilium install ${CILIUM_VERSION:+--version "$CILIUM_VERSION"} "${values[@]}" "$@"
+  local values=() version
+  [ -f values.yaml ] && values=(--values values.yaml)
+  version="$(cilium_version)"
+  cilium install ${version:+--version "$version"} "${values[@]}" "$@"
+}
+
+# CILIUM_VERSION if set, else the latest stable release, else (offline) the cilium-cli default.
+# The cilium-cli default is the newest chart embedded at build time, often an old patch release.
+cilium_version() {
+  if [ -n "${CILIUM_VERSION:-}" ]; then echo "$CILIUM_VERSION"; return; fi
+  cilium version --client 2>/dev/null | sed -n 's/^cilium image (stable): v\([0-9][0-9.]*\)$/\1/p' || true
 }
 
 # sudo resets PATH, so pass the mise-managed binary by absolute path

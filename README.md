@@ -135,11 +135,18 @@ Without `mise activate`, use `mise x -- kubectl ...` in the stage folder, or
 
 ### Cilium version
 
-By default, `cilium install` installs the Cilium version that is the default of the installed cilium-cli.
-Thus, when `mise install` updates cilium-cli, the Cilium version can change too.
+By default, the `cilium_up` function in `lib/lab.sh` installs the latest stable Cilium release. It reads this
+version from `cilium version --client` (line `cilium image (stable)`, from the `stable.txt` file of the Cilium
+repository). Thus, a new Cilium release goes into the labs without a change in this repository.
 
-To pin the Cilium version, set `CILIUM_VERSION`. The `cilium_up` function in `lib/lab.sh` then adds
-`--version $CILIUM_VERSION` to `cilium install`.
+The labs do not use the default version of cilium-cli. That default is the newest Helm chart that cilium-cli
+contains when it is built. It can be an old patch release with known bugs. For example, a cilium-cli release
+had 1.20.1 as its default, and the agent of 1.20.1 fails on some kernels (see
+[01-basic](01-basic/README.md#troubleshooting)). If the host cannot get `stable.txt` (no internet access),
+`cilium_up` gives no `--version`, and `cilium install` uses the cilium-cli default.
+
+To pin the Cilium version, set `CILIUM_VERSION`. Then `cilium_up` gives `--version $CILIUM_VERSION` to
+`cilium install`.
 
 - For all stages, for all users: add it to `[env]` in the root `mise.toml`.
 
@@ -152,10 +159,16 @@ To pin the Cilium version, set `CILIUM_VERSION`. The `cilium_up` function in `li
   root. git ignores this file.
 - For one run: `CILIUM_VERSION=1.20.3 mise run up`.
 
-Show the version that cilium-cli uses by default:
+Show the latest stable version and the cilium-cli default:
 
 ```bash
 cilium version --client
+```
+
+```
+cilium-cli: v0.20.x compiled with go... on linux/amd64
+cilium image (default): v1.20.1
+cilium image (stable): v1.20.3
 ```
 
 ### Cilium Helm values
