@@ -1,5 +1,5 @@
 [env]
-CLUSTER = "lab"
+CLUSTER = "l2"
 KUBECONFIG = "{{config_root}}/build/kubeconfig"
 
 [tasks.down]

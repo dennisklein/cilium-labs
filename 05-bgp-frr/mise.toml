@@ -1,5 +1,5 @@
 [env]
-CLUSTER = "lab"
+CLUSTER = "bgp"
 KUBECONFIG = "{{config_root}}/build/kubeconfig"
 
 [tasks.down]
