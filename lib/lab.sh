@@ -1,4 +1,4 @@
-# Sourced by the stage tasks. mise provides [env] (CILIUM_VERSION, CLUSTER, KUBECONFIG) and [tools].
+# Sourced by the stage tasks. mise provides [env] (CLUSTER, KUBECONFIG, optional CILIUM_VERSION) and [tools].
 # KUBECONFIG is per stage, so kubectl and cilium need no --context (stage 07 is the exception).
 set -euo pipefail
 
@@ -8,7 +8,7 @@ kind_up() {  # [kind config], default kind.yaml
 }
 
 cilium_up() {  # extra flags (--set, --context) are passed through
-  cilium install --version "$CILIUM_VERSION" --values values.yaml \
+  cilium install ${CILIUM_VERSION:+--version "$CILIUM_VERSION"} --values values.yaml \
     --set k8sServiceHost="${API_HOST:-${CLUSTER}-control-plane}" --set k8sServicePort=6443 "$@"
 }
 

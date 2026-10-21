@@ -17,7 +17,6 @@ jq = "latest"
 envsubst = "latest"
 
 [env]
-CILIUM_VERSION = "1.20.3"
 LAB_ROOT = "{{config_root}}"   # stage tasks source $LAB_ROOT/lib/lab.sh
 
 [tasks.preflight]
