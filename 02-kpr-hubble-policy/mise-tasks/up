@@ -5,6 +5,7 @@ source "$LAB_ROOT/lib/lab.sh"
 
 kind_up
 cilium_up
+wait_crds ciliumnetworkpolicies.cilium.io
 kubectl apply -f demo.yaml
 kubectl -n demo wait --for=condition=Ready pod --all --timeout=120s
 mise run check
